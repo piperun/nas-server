@@ -1,0 +1,6 @@
+*.key
+*.log
+*.ini
+hosts
+inventory/*
+inventories/*
