@@ -1,0 +1,15 @@
+---
+- name: reboot system
+  reboot:
+    reboot_timeout: "{{ reboot_timeout }}"
+    msg: "Rebooting to apply rpm-ostree changes"
+
+- name: restart sshd
+  systemd:
+    name: sshd
+    state: restarted
+
+- name: reload firewalld
+  systemd:
+    name: firewalld
+    state: reloaded

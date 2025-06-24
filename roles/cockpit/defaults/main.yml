@@ -1,0 +1,17 @@
+---
+# Default variables for cockpit role
+cockpit_packages:
+  - cockpit-system
+  - cockpit-ostree
+  - cockpit-podman
+  - cockpit-networkmanager
+
+cockpit_additional_packages: []
+
+enable_password_auth: true
+cockpit_firewall_service: cockpit
+cockpit_container_image: "quay.io/cockpit/ws"
+cockpit_container_name: "cockpit-ws"
+
+# Reboot timeout
+reboot_timeout: 600

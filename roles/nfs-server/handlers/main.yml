@@ -1,0 +1,11 @@
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: enable nfs container service
+  systemd:
+    name: "{{ nfs_container_name }}.service"
+    enabled: yes
+    state: started
+    daemon_reload: yes

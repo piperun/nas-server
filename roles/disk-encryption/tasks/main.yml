@@ -1,0 +1,118 @@
+---
+- name: Ensure cryptsetup is layered onto the system
+  community.general.rpm_ostree_pkg:
+    name: cryptsetup
+    state: present
+  register: cryptsetup_install_result
+  notify: Reboot to apply OS changes
+
+- name: Create directory for LUKS keyfiles on remote host
+  file:
+    path: /etc/luks-keys
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Copy LUKS keyfiles to remote host
+  copy:
+    src: "{{ item.value.source }}"
+    dest: "/etc/luks-keys/{{ item.key }}.key"
+    owner: root
+    group: root
+    mode: '0400'
+  loop: "{{ luks_keyfiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+# --- NEW VERIFICATION BLOCK ---
+- name: "VERIFY | Get checksums of remote LUKS keyfiles"
+  stat:
+    path: "/etc/luks-keys/{{ item.key }}.key"
+    checksum_algorithm: sha1
+  loop: "{{ luks_keyfiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: remote_keyfiles_stat
+  when: not ansible_check_mode
+
+- name: "VERIFY | Get checksums of local LUKS keyfiles"
+  stat:
+    path: "{{ item.value.source }}"
+    checksum_algorithm: sha1
+  loop: "{{ luks_keyfiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: localhost
+  run_once: true
+  become: no
+  register: local_keyfiles_stat
+  when: not ansible_check_mode
+
+- name: "VERIFY | Ensure remote and local keyfiles are identical"
+  assert:
+    that:
+      # item.0 is the index provided by with_indexed_items
+      - remote_keyfiles_stat.results[item.0].stat.exists
+      - remote_keyfiles_stat.results[item.0].stat.checksum == local_keyfiles_stat.results[item.0].stat.checksum
+    # item.1 is the list item, so we use item.1.key to get the name
+    fail_msg: "Verification failed for {{ item.1.key }}.key. Either the remote file is missing or its checksum does not match the local source."
+    success_msg: "Verification succeeded for {{ item.1.key }}.key."
+  # Use with_indexed_items to get both the index (item.0) and the value (item.1)
+  with_indexed_items: "{{ luks_keyfiles | dict2items }}"
+  when: not ansible_check_mode
+# --- END VERIFICATION BLOCK ---
+
+- name: "ENCRYPT | Format applicable devices with LUKS (using primary key)"
+  community.crypto.luks_device:
+    device: "{{ item.device }}"
+    state: present
+    keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
+  loop: "{{ storage_drives }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.encrypt | default(false)
+
+- name: "ENCRYPT | Add any additional keys to LUKS slots"
+  community.crypto.luks_device:
+    device: "{{ item.0.device }}"
+    state: present
+    keyfile: "/etc/luks-keys/{{ (item.0.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
+    new_keyfile: "/etc/luks-keys/{{ item.1.key }}.key"
+    key_slot: "{{ item.1.slot }}"
+  loop: "{{ storage_drives | subelements('luks_keys') }}"
+  loop_control:
+    label: "{{ item.0.name }} - add key to slot {{ item.1.slot }}"
+  when:
+    - item.0.encrypt | default(false)
+    - item.1.slot > 0
+
+- name: "ENCRYPT | Open LUKS devices"
+  community.crypto.luks_device:
+    device: "{{ item.device }}"
+    state: opened
+    name: "{{ item.luks_name }}"
+    keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
+  loop: "{{ storage_drives }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.encrypt | default(false)
+
+- name: "FILESYSTEM | Create filesystem on all drives"
+  filesystem:
+    fstype: "{{ item.fstype }}"
+    dev: "{{ item.encrypt | default(false) | ternary('/dev/mapper/' + item.luks_name, item.device) }}"
+  loop: "{{ storage_drives }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "MOUNT | Mount all drives"
+  mount:
+    path: "{{ item.mount_point }}"
+    src: "{{ item.encrypt | default(false) | ternary('/dev/mapper/' + item.luks_name, item.device) }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.mount_options | default('defaults,noatime') }}"
+    state: mounted
+  loop: "{{ storage_drives }}"
+  loop_control:
+    label: "{{ item.name }}"

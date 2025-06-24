@@ -1,0 +1,22 @@
+---
+- name: Setup NFS Server on Fedora CoreOS
+  hosts: nas_servers
+  become: yes
+  gather_facts: yes
+  
+  roles:
+    - nfs-server
+
+  post_tasks:
+    - name: Display NFS server information
+      debug:
+        msg: |
+          NFS Server successfully configured!
+          
+          Server IP: {{ ansible_default_ipv4.address }}
+          NFS Port: {{ nfs_host_port }}
+          Storage Path: {{ nfs_export_path }}
+          Container: {{ nfs_container_name }}
+          
+          Mount example:
+          sudo mount -t nfs4 {{ ansible_default_ipv4.address }}:/ /mnt/nfs

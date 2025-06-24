@@ -1,0 +1,39 @@
+---
+- name: Configure Fedora CoreOS NAS Server
+  hosts: nas_servers
+  become: yes
+  #serial: 1
+  
+  tasks:
+    - name: Gather service facts explicitly
+      ansible.builtin.service_facts:
+      
+    - name: Debug cockpit service state
+      debug:
+        msg: |
+          Cockpit service state: {{ ansible_facts.services['cockpit.service'].state }}
+          Cockpit service status: {{ ansible_facts.services['cockpit.service'].status }}
+      when: ansible_facts.services['cockpit.service'] is defined
+
+  roles:
+    - role: encrypt
+      when: storage_drives | selectattr('encrypt', 'equalto', true) | list | length > 0
+
+    - role: mount
+
+    - role: nfs-server
+
+  post_tasks:
+    - name: Display access information
+      debug:
+        msg: |
+          NAS Server setup complete!
+          
+          Cockpit Web Interface:
+          http://{{ ansible_default_ipv4.address }}:9090
+          
+          NFS Server:
+          Mount command example:
+          sudo mount -t nfs4 {{ ansible_default_ipv4.address }}:/ /mnt/nfs
+          
+          NFS Export path on server: {{ nfs_export_path }}

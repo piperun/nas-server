@@ -1,0 +1,32 @@
+---
+- name: Generate LUKS keyfiles locally
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars_files:
+    - host_vars/nas-server.yml
+
+  tasks:
+    - name: Create local directory for LUKS keys
+      file:
+        path: "{{ playbook_dir }}/luks-keys"
+        state: directory
+        mode: '0700'
+
+    - name: Generate keyfiles
+      command: "dd if=/dev/urandom of={{ item.value.source }} bs=512 count=1"
+      args:
+        creates: "{{ item.value.source }}"
+      loop: "{{ luks_keyfiles | dict2items }}"
+
+    - name: Secure local keyfiles
+      file:
+        path: "{{ item.value.source }}"
+        mode: '0400'
+      loop: "{{ luks_keyfiles | dict2items }}"
+
+    - name: Display next steps
+      debug:
+        msg:
+          - "Keyfiles generated in '{{ playbook_dir }}/luks-keys/'."
+          - "You can now run your main playbook."

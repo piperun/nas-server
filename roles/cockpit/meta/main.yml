@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: "System Administrator"
+  description: "Install and configure Cockpit on Fedora CoreOS"
+  company: "NAS Server"
+  license: "MIT"
+  min_ansible_version: "2.9"
+  platforms:
+    - name: Fedora
+      versions:
+        - "CoreOS"
+  galaxy_tags:
+    - cockpit
+    - coreos
+    - monitoring
+
+dependencies: []

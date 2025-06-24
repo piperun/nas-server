@@ -1,0 +1,5 @@
+---
+- name: Reboot to apply OS changes
+  reboot:
+    msg: "Rebooting to apply layered package changes for encryption"
+    reboot_timeout: 3600

@@ -1,0 +1,5 @@
+---
+- name: Reboot to apply OS changes
+  reboot:
+    msg: "Rebooting to apply layered package changes (cryptsetup)"
+    reboot_timeout: 3600

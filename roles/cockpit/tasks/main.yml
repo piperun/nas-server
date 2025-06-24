@@ -1,0 +1,110 @@
+---
+- name: Check if Cockpit is already running
+  systemd:
+    name: cockpit.socket
+  register: cockpit_status
+  failed_when: false
+
+- name: Skip Cockpit setup if already running
+  debug:
+    msg: "Cockpit is already active, skipping installation and configuration"
+  when: cockpit_status.status is defined and cockpit_status.status.ActiveState == "active"
+
+- name: Install and configure Cockpit
+  block:
+    - name: Check currently installed packages
+      command: rpm-ostree status --json
+      register: ostree_status
+      changed_when: false
+
+    - name: Parse installed packages
+      set_fact:
+        installed_packages: "{{ (ostree_status.stdout | from_json)['deployments'][0]['requested-packages'] | default([]) }}"
+
+    - name: Determine packages to install
+      set_fact:
+        packages_to_install: "{{ cockpit_packages | difference(installed_packages) }}"
+
+    - name: Install Cockpit packages as overlay RPMs
+      command: rpm-ostree install {{ packages_to_install | join(' ') }}
+      when: packages_to_install | length > 0
+      notify:
+        - reboot system
+
+    - name: Enable Cockpit socket
+      systemd:
+        name: cockpit.socket
+        enabled: yes
+        state: started
+
+    - name: Configure firewall for Cockpit
+      firewalld:
+        service: cockpit
+        permanent: yes
+        state: enabled
+        immediate: yes
+  when: cockpit_status.status is not defined or cockpit_status.status.ActiveState != "active"
+
+- name: Flush handlers to ensure reboot happens before continuing
+  meta: flush_handlers
+
+- name: Wait for system to come back online after reboot
+  wait_for_connection:
+    delay: 30
+    timeout: "{{ reboot_timeout }}"
+
+- name: Ensure SSH config directory exists
+  file:
+    path: "{{ ssh_config_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Enable password-based SSH authentication
+  copy:
+    content: "PasswordAuthentication yes\n"
+    dest: "{{ ssh_config_dir }}/{{ ssh_config_file }}"
+    mode: '0644'
+  notify: restart sshd
+  when: enable_password_auth | bool
+
+- name: Enable Cockpit socket
+  systemd:
+    name: cockpit.socket
+    enabled: yes
+    state: started
+
+- name: Configure firewall for Cockpit
+  firewalld:
+    service: cockpit
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Run Cockpit web service container (RUN label)
+  command: podman container runlabel --name {{ cockpit_container_name }} RUN {{ cockpit_container_image }}
+  register: cockpit_run_result
+  changed_when: cockpit_run_result.rc == 0
+  failed_when: 
+    - cockpit_run_result.rc != 0
+    - "'already exists' not in cockpit_run_result.stderr"
+
+- name: Make Cockpit start on boot (INSTALL label)
+  command: podman container runlabel INSTALL {{ cockpit_container_image }}
+  register: cockpit_install_result
+  changed_when: cockpit_install_result.rc == 0
+
+- name: Enable cockpit service
+  systemd:
+    name: "{{ cockpit_service_name }}"
+    enabled: yes
+    daemon_reload: yes
+
+- name: Verify Cockpit is accessible
+  uri:
+    url: "http://localhost:9090"
+    method: GET
+    status_code: [200, 401]  # 401 is expected for login page
+  register: cockpit_check
+  retries: 5
+  delay: 10
+  until: cockpit_check is succeeded

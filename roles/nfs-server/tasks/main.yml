@@ -1,0 +1,72 @@
+---
+- name: Create NFS base directory
+  file:
+    path: "{{ nfs_base_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create main NFS export directory
+  file:
+    path: "{{ nfs_export_path }}" 
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: "NFS | Create export subdirectories"
+  file:
+    path: "{{ nfs_export_path }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ nfs_drives }}"
+
+- name: "NFS | Bind mount exported drives"
+  mount:
+    src: "{{ (storage_drives | selectattr('name', 'equalto', item) | first).mount_point }}"
+    path: "{{ nfs_export_path }}/{{ item }}"
+    fstype: none
+    opts: bind
+    state: mounted
+  loop: "{{ nfs_drives }}"
+
+- name: Set SELinux context for NFS storage directory
+  command: semanage fcontext -a -t container_file_t "{{ nfs_export_path | replace('/var/mnt', '/mnt') }}(/.*)?"
+  register: selinux_context_result
+  failed_when:
+    - selinux_context_result.rc != 0
+    - "'already defined' not in selinux_context_result.stderr"
+    - "'File context for' in selinux_context_result.stderr and 'already defined' not in selinux_context_result.stderr"
+  changed_when: selinux_context_result.rc == 0
+
+- name: Apply SELinux context to NFS storage directory
+  command: restorecon -R "{{ nfs_export_path }}"
+  when: selinux_context_result is changed
+
+- name: Enable NFS service in firewall
+  firewalld:
+    service: "{{ nfs_firewall_service }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Create systemd containers directory
+  file:
+    path: /etc/containers/systemd
+    state: directory
+    mode: '0755'
+
+- name: Create NFS server Quadlet container file
+  template:
+    src: nfs-server.container.j2
+    dest: /etc/containers/systemd/{{ nfs_container_name }}.container
+    mode: '0644'
+  notify:
+    - reload systemd
+    - enable nfs container service
+
+- name: Verify NFS server is accessible
+  wait_for:
+    port: "{{ nfs_host_port }}"
+    host: "localhost"
+    delay: 5
+    timeout: 30

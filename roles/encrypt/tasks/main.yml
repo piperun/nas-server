@@ -1,0 +1,44 @@
+---
+- name: "ENCRYPT | Ensure cryptsetup is layered"
+  community.general.rpm_ostree_pkg:
+    name: cryptsetup
+    state: present
+  notify: Reboot to apply OS changes
+
+- name: "ENCRYPT | Create directory for LUKS keyfiles"
+  file:
+    path: /etc/luks-keys
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: "ENCRYPT | Copy LUKS keyfiles to remote host"
+  copy:
+    src: "{{ item.value.source }}"
+    dest: "/etc/luks-keys/{{ item.key }}.key"
+    owner: root
+    group: root
+    mode: '0400'
+  loop: "{{ luks_keyfiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: "ENCRYPT | Format devices with LUKS"
+  community.crypto.luks_device:
+    device: "{{ item.device }}"
+    state: present
+    keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
+  loop: "{{ storage_drives | selectattr('encrypt', 'equalto', true) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "ENCRYPT | Open LUKS devices"
+  community.crypto.luks_device:
+    device: "{{ item.device }}"
+    state: opened
+    name: "{{ item.luks_name }}"
+    keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
+  loop: "{{ storage_drives | selectattr('encrypt', 'equalto', true) }}"
+  loop_control:
+    label: "{{ item.name }}"

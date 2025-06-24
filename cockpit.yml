@@ -1,0 +1,27 @@
+---
+- name: Install and Configure Cockpit on Fedora CoreOS
+  hosts: nas_servers
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Verify we're running on Fedora CoreOS
+      fail:
+        msg: "This playbook is designed for Fedora CoreOS only"
+      when: 
+        - ansible_distribution != "Fedora"
+        - "'ostree' not in ansible_cmdline"
+
+  roles:
+    - cockpit
+
+  post_tasks:
+    - name: Display Cockpit access information
+      debug:
+        msg: |
+          Cockpit has been successfully installed and configured!
+          
+          Access Cockpit via web browser at:
+          http://{{ ansible_default_ipv4.address }}:9090
+          
+          Login with your system credentials.
