@@ -1,0 +1,72 @@
+---
+# roles/vuetorrent/tasks/main.yml
+
+- name: "Validate VueTorrent configuration"
+  ansible.builtin.assert:
+    that:
+      - vuetorrent_username is defined
+      - vuetorrent_password is defined
+    fail_msg: "VueTorrent username and password must be defined"
+    success_msg: "VueTorrent configuration validated"
+
+- name: "Create VueTorrent config directory"
+  ansible.builtin.file:
+    path: "{{ vuetorrent_config_path }}"
+    state: directory
+    mode: '0755'
+    owner: "1000"
+    group: "1000"
+
+- name: "Create VueTorrent downloads directory"
+  ansible.builtin.file:
+    path: "{{ vuetorrent_downloads_path }}"
+    state: directory
+    mode: '0755'
+    owner: "1000"
+    group: "1000"
+
+- name: "Allow VueTorrent traffic through the firewall"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - "{{ vuetorrent_webui_port }}/tcp"
+    - "{{ vuetorrent_torrent_port }}/tcp"
+    - "{{ vuetorrent_torrent_port }}/udp"
+
+- name: "Template the VueTorrent Quadlet unit file"
+  ansible.builtin.template:
+    src: "vuetorrent.container.j2"
+    dest: "{{ vuetorrent_quadlet_dir }}/{{ vuetorrent_container_name }}.container"
+    mode: '0644'
+  notify: Restart vuetorrent container
+
+- name: "Enable and start the VueTorrent service"
+  ansible.builtin.systemd:
+    name: "{{ vuetorrent_container_name }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: "Wait for VueTorrent to start"
+  ansible.builtin.wait_for:
+    port: "{{ vuetorrent_webui_port }}"
+    host: "localhost"
+    delay: 10
+    timeout: 60
+
+- name: "Display VueTorrent access information"
+  ansible.builtin.debug:
+    msg: |
+      VueTorrent is now running!
+      
+      Web Interface: http://{{ ansible_default_ipv4.address }}:{{ vuetorrent_webui_port }}
+      Username: {{ vuetorrent_username }}
+      Password: [configured via vault]
+      
+      Download directory: {{ vuetorrent_downloads_path }}
+      Config directory: {{ vuetorrent_config_path }}
+      
+      Torrent port: {{ vuetorrent_torrent_port }}

@@ -1,0 +1,30 @@
+---
+- name: Deploy VueTorrent qBittorrent Server
+  hosts: nas_servers
+  become: yes
+  
+  tasks:
+    - name: Gather service facts explicitly
+      ansible.builtin.service_facts:
+  
+  roles:
+    - role: vuetorrent
+
+  post_tasks:
+    - name: Display VueTorrent access information
+      debug:
+        msg: |
+          VueTorrent qBittorrent Server setup complete!
+          
+          Web Interface:
+          http://{{ ansible_default_ipv4.address }}:{{ vuetorrent_webui_port | default('8080') }}
+          
+          Username: {{ vuetorrent_username | default('admin') }}
+          Password: [from vault]
+          
+          Downloads will be saved to configured storage drives
+          
+          Torrent Port: {{ vuetorrent_torrent_port | default('6881') }}
+          
+          Note: Configure your router to forward the torrent port 
+          for better connectivity and download speeds.

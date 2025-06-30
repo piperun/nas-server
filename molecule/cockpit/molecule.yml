@@ -1,0 +1,33 @@
+---
+# Cockpit-specific Molecule test configuration
+# Tests only the cockpit role
+
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: cockpit-test
+    image: registry.fedoraproject.org/fedora:latest
+    pre_build_image: true
+    privileged: false
+    command: sleep infinity
+    published_ports: []  # Test internally only
+    networks:
+      - name: molecule
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: '../../roles'
+  inventory:
+    host_vars:
+      cockpit-test:
+        # Mock vault variables for Cockpit
+        vault_cockpit_admin_password: "cockpit123test"
+        cockpit_admin_password: "{{ vault_cockpit_admin_password }}"
+
+verifier:
+  name: ansible

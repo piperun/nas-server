@@ -16,12 +16,16 @@
       when: ansible_facts.services['cockpit.service'] is defined
 
   roles:
-    - role: encrypt
-      when: storage_drives | selectattr('encrypt', 'equalto', true) | list | length > 0
+   # - role: encrypt
+   #   when: encrypt_drives | length > 0
 
-    - role: mount
+   # - role: storage
 
-    - role: nfs-server
+    #- role: nfs-server
+
+    - role: samba-server
+    - role: vuetorrent
+    - role: cockpit
 
   post_tasks:
     - name: Display access information

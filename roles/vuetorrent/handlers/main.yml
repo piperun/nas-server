@@ -1,0 +1,8 @@
+---
+# roles/vuetorrent/handlers/main.yml
+
+- name: Restart vuetorrent container
+  ansible.builtin.systemd:
+    name: "{{ vuetorrent_container_name }}.service"
+    state: restarted
+    daemon_reload: true

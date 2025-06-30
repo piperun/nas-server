@@ -1,0 +1,36 @@
+# This file is managed by Ansible.
+# It will be placed in {{ vuetorrent_quadlet_dir }}
+
+[Unit]
+Description=VueTorrent qBittorrent Container
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName={{ vuetorrent_container_name }}
+Image={{ vuetorrent_image }}
+PublishPort={{ vuetorrent_webui_port }}:8080
+PublishPort={{ vuetorrent_torrent_port }}:6881/tcp
+PublishPort={{ vuetorrent_torrent_port }}:6881/udp
+
+# Environment variables
+Environment=TZ={{ vuetorrent_timezone }}
+Environment=PUID=1000
+Environment=PGID=1000
+Environment=WEBUI_PORT=8080
+Environment=TORRENTING_PORT={{ vuetorrent_torrent_port }}
+
+# Volume mounts
+Volume={{ vuetorrent_config_path }}:/config
+Volume={{ vuetorrent_downloads_path }}:/downloads
+
+# Security settings
+SecurityLabelDisable=false
+User=1000:1000
+
+[Service]
+Restart=unless-stopped
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

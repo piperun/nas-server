@@ -1,0 +1,180 @@
+---
+# VueTorrent-specific verification
+
+- name: Verify - VueTorrent (qBittorrent) functionality
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if VueTorrent container is running
+      command: podman ps --filter "name=vuetorrent" --format json
+      register: vuetorrent_containers
+      changed_when: false
+      
+    - name: Parse VueTorrent container info
+      set_fact:
+        vuetorrent_running: "{{ (vuetorrent_containers.stdout | from_json) | length > 0 }}"
+        
+    - name: Verify VueTorrent container is running
+      assert:
+        that:
+          - vuetorrent_running
+        fail_msg: "VueTorrent container is not running"
+        success_msg: "VueTorrent container is running successfully"
+        
+    - name: Check VueTorrent container logs
+      command: podman logs vuetorrent
+      register: vuetorrent_logs
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display VueTorrent logs (last 15 lines)
+      debug:
+        msg: "{{ vuetorrent_logs.stdout_lines[-15:] if vuetorrent_logs.stdout_lines else 'No logs available' }}"
+      when: vuetorrent_logs is defined
+      
+    - name: Test qBittorrent WebUI port 8080
+      wait_for:
+        port: 8080
+        host: localhost
+        timeout: 45  # qBittorrent can take time to start
+        msg: "qBittorrent WebUI port 8080 is not accessible"
+        
+    - name: Test BitTorrent port 6881 (TCP)
+      wait_for:
+        port: 6881
+        host: localhost
+        timeout: 15
+        msg: "BitTorrent TCP port 6881 is not accessible"
+      ignore_errors: true
+      
+    - name: Test qBittorrent WebUI HTTP response
+      uri:
+        url: "http://localhost:8080"
+        method: GET
+        timeout: 30
+        status_code: [200, 401, 404]  # 401 for auth required, 404 for different path
+      register: webui_response
+      retries: 3
+      delay: 10
+      
+    - name: Verify WebUI is accessible
+      assert:
+        that:
+          - webui_response.status in [200, 401, 404]
+        fail_msg: "qBittorrent WebUI is not responding properly"
+        success_msg: "qBittorrent WebUI is accessible (status: {{ webui_response.status }})"
+      when: webui_response is defined
+      
+    - name: Check downloads directory exists
+      stat:
+        path: "{{ item.mount_point }}"
+      register: downloads_check
+      loop: "{{ storage_drives }}"
+      when: item.name == "downloads"
+      
+    - name: Verify downloads directory
+      assert:
+        that:
+          - downloads_check.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "Downloads directory does not exist"
+        success_msg: "Downloads directory exists"
+      when: downloads_check is defined
+      
+    - name: Check qBittorrent subdirectories
+      stat:
+        path: "{{ item.mount_point }}/{{ subdir }}"
+      register: subdir_check
+      loop: "{{ storage_drives }}"
+      loop_control:
+        loop_var: item
+      when: item.name == "downloads"
+      vars:
+        subdir: "{{ item2 }}"
+      with_items:
+        - "completed"
+        - "incomplete"
+        - "watch"
+      loop_control:
+        loop_var: item2
+      
+    - name: Verify qBittorrent subdirectories exist
+      assert:
+        that:
+          - subdir_check.results | selectattr('stat.exists', 'equalto', true) | list | length >= 3
+        fail_msg: "qBittorrent subdirectories missing"
+        success_msg: "qBittorrent subdirectories exist"
+      when: subdir_check is defined
+      
+    - name: Check test file in downloads
+      stat:
+        path: "{{ item.mount_point }}/README.txt"
+      register: readme_check
+      loop: "{{ storage_drives }}"
+      when: item.name == "downloads"
+      
+    - name: Verify README file exists
+      assert:
+        that:
+          - readme_check.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "README test file missing"
+        success_msg: "README test file exists"
+      when: readme_check is defined
+      
+    - name: Check systemd Quadlet service
+      systemd:
+        name: vuetorrent.service
+      register: vuetorrent_service
+      ignore_errors: true
+      
+    - name: Display service status
+      debug:
+        msg: "VueTorrent service status: {{ vuetorrent_service.status.ActiveState if vuetorrent_service.status is defined else 'Unknown' }}"
+      when: vuetorrent_service is defined
+      
+    - name: Test container environment variables
+      command: podman exec vuetorrent env
+      register: container_env
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Verify qBittorrent configuration
+      assert:
+        that:
+          - "'WEBUI_PORT=8080' in container_env.stdout"
+        fail_msg: "qBittorrent WebUI port not properly configured"
+        success_msg: "qBittorrent WebUI port configured correctly"
+      when: container_env is succeeded
+      
+    - name: Test qBittorrent API (if accessible)
+      uri:
+        url: "http://localhost:8080/api/v2/app/version"
+        method: GET
+        timeout: 15
+      register: api_response
+      ignore_errors: true
+      
+    - name: Display API response
+      debug:
+        msg: "qBittorrent API version: {{ api_response.content if api_response is succeeded else 'API not accessible' }}"
+      when: api_response is defined
+      
+    - name: Display test summary
+      debug:
+        msg: |
+          ===============================
+          VUETORRENT MOLECULE TEST SUMMARY
+          ===============================
+          ✅ VueTorrent container: {{ 'RUNNING' if vuetorrent_running else 'NOT RUNNING' }}
+          ✅ WebUI port 8080: ACCESSIBLE ({{ webui_response.status if webui_response is defined else 'UNKNOWN' }})
+          ✅ Downloads directory: CONFIGURED
+          ✅ Subdirectories: PRESENT
+          ✅ Test files: CREATED
+          ✅ Environment: CONFIGURED
+          
+          qBittorrent is ready for torrent management!
+          WebUI: http://localhost:8080
+          Username: {{ vault_vuetorrent_username }}
+          
+          Test completed successfully!

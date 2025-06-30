@@ -1,0 +1,15 @@
+---
+# roles/encrypt/defaults/main.yml
+
+# LUKS encryption configuration
+luks_keyfiles: {}
+# Example:
+# luks_keyfiles:
+#   drive1:
+#     source: "luks-keys/drive1.key"
+
+# Fail fast on errors
+encrypt_fail_fast: true
+
+# Storage drives to encrypt (should be passed from group_vars)
+storage_drives: []

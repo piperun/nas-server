@@ -1,0 +1,70 @@
+---
+# VueTorrent role-specific converge playbook
+
+- name: Converge - Test VueTorrent (qBittorrent)
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Install required packages
+      package:
+        name:
+          - podman
+          - systemd
+          - firewalld
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Start firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: true
+      ignore_errors: true
+      
+    - name: Create downloads directory
+      file:
+        path: "{{ item.mount_point }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ storage_drives }}"
+      when: item.name == "downloads"
+      
+    - name: Create qBittorrent subdirectories
+      file:
+        path: "{{ drive.mount_point }}/{{ subdir }}"
+        state: directory
+        owner: "{{ drive.owner }}"
+        group: "{{ drive.group }}"
+        mode: "0755"
+      loop: "{{ storage_drives | selectattr('name', 'equalto', 'downloads') | product(['completed', 'incomplete', 'watch']) | list }}"
+      loop_control:
+        loop_var: item
+      vars:
+        drive: "{{ item[0] }}"
+        subdir: "{{ item[1] }}"
+      
+    - name: Create test torrent file
+      copy:
+        content: |
+          # Test torrent info
+          This is a test downloads directory for qBittorrent.
+          
+          Subdirectories:
+          - completed/  - Finished downloads
+          - incomplete/ - In-progress downloads  
+          - watch/      - Auto-add directory
+          
+          Created by Molecule test.
+        dest: "{{ item.mount_point }}/README.txt"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0644"
+      loop: "{{ storage_drives }}"
+      when: item.name == "downloads"
+  
+  roles:
+    - role: vuetorrent

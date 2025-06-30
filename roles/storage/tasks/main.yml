@@ -1,0 +1,87 @@
+---
+# roles/storage/tasks/main.yml
+
+- name: "Validate storage drives configuration"
+  ansible.builtin.assert:
+    that:
+      - storage_drives is defined
+      - storage_drives | length > 0
+      - item.device is defined
+      - item.name is defined
+    fail_msg: "Invalid storage drive configuration for {{ item.name | default('unknown') }}"
+    success_msg: "Storage drive configuration validated"
+  loop: "{{ storage_drives }}"
+  loop_control:
+    label: "{{ item.name | default(item.device) }}"
+
+- name: "Validate storage mounts configuration"
+  ansible.builtin.assert:
+    that:
+      - storage_mounts is defined
+      - storage_mounts | length > 0
+      - item.storage_drive is defined
+      - item.mount_point is defined
+      - storage_drives | selectattr('name', 'equalto', item.storage_drive) | list | length > 0
+    fail_msg: "Invalid storage mount configuration for {{ item.storage_drive | default('unknown') }}"
+    success_msg: "Storage mount configuration validated"
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"
+
+- name: "Create filesystem on drives (if format=true)"
+  filesystem:
+    fstype: "{{ drive_info.fstype }}"
+    dev: "{{ _is_encrypted | ternary('/dev/mapper/' + (encrypt_drives | selectattr('device', 'equalto', drive_info.device) | first).luks_name, drive_info.device) }}"
+  vars:
+    drive_info: "{{ storage_drives | selectattr('name', 'equalto', item.storage_drive) | first }}"
+    _is_encrypted: "{{ encrypt_drives | selectattr('device', 'equalto', drive_info.device) | list | length > 0 }}"
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"
+  when: 
+    - drive_info.format | default(false)
+    - drive_info.fstype is defined
+
+- name: "Create mount point directories"
+  ansible.builtin.file:
+    path: "{{ item.mount_point }}"
+    state: directory
+    mode: "{{ item.mode | default('0755') }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"
+
+- name: "Mount all storage drives"
+  mount:
+    path: "{{ item.mount_point }}"
+    src: "{{ _target_device }}"
+    fstype: "{{ drive_info.fstype | default('auto') }}"
+    opts: "{{ item.mount_options | default(mount_default_options) }}"
+    state: mounted
+  vars:
+    drive_info: "{{ storage_drives | selectattr('name', 'equalto', item.storage_drive) | first }}"
+    _matching_encrypt_drives: "{{ encrypt_drives | selectattr('device', 'equalto', drive_info.device) | list }}"
+    _is_encrypted: "{{ _matching_encrypt_drives | length > 0 }}"
+    _target_device: "{{ _is_encrypted | ternary('/dev/mapper/' + _matching_encrypt_drives[0].luks_name, drive_info.device) }}"
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"
+
+- name: "Verify mounts are accessible"
+  ansible.builtin.file:
+    path: "{{ item.mount_point }}/.mount-test"
+    state: touch
+    mode: '0644'
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"
+
+- name: "Clean up test files"
+  ansible.builtin.file:
+    path: "{{ item.mount_point }}/.mount-test"
+    state: absent
+  loop: "{{ storage_mounts }}"
+  loop_control:
+    label: "{{ item.storage_drive }}"

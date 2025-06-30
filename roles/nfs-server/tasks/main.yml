@@ -1,4 +1,22 @@
 ---
+# roles/nfs-server/tasks/main.yml
+
+- name: "Validate NFS configuration"
+  ansible.builtin.assert:
+    that:
+      - nfs_drives is defined
+      - storage_drives is defined
+    fail_msg: "NFS drives or storage drives not defined"
+    success_msg: "NFS configuration validated"
+
+- name: "Validate that all nfs_drives exist in storage_drives"
+  assert:
+    that:
+      - storage_drives | selectattr('name', 'equalto', item) | list | length > 0
+    fail_msg: "Drive '{{ item }}' in nfs_drives not found in storage_drives configuration"
+    success_msg: "Drive '{{ item }}' validated in storage_drives"
+  loop: "{{ nfs_drives }}"
+
 - name: Create NFS base directory
   file:
     path: "{{ nfs_base_path }}"
@@ -13,29 +31,28 @@
     owner: root
     group: root
 
-- name: "NFS | Create export subdirectories"
+- name: "Create export subdirectories"
   file:
     path: "{{ nfs_export_path }}/{{ item }}"
     state: directory
     mode: '0755'
   loop: "{{ nfs_drives }}"
 
-- name: "NFS | Bind mount exported drives"
+- name: "Bind mount exported drives"
   mount:
     src: "{{ (storage_drives | selectattr('name', 'equalto', item) | first).mount_point }}"
     path: "{{ nfs_export_path }}/{{ item }}"
     fstype: none
-    opts: bind
+    opts: bind,nodev,nosuid
     state: mounted
   loop: "{{ nfs_drives }}"
 
 - name: Set SELinux context for NFS storage directory
-  command: semanage fcontext -a -t container_file_t "{{ nfs_export_path | replace('/var/mnt', '/mnt') }}(/.*)?"
+  command: semanage fcontext -a -t container_file_t "{{ nfs_export_path }}(/.*)?"
   register: selinux_context_result
   failed_when:
     - selinux_context_result.rc != 0
     - "'already defined' not in selinux_context_result.stderr"
-    - "'File context for' in selinux_context_result.stderr and 'already defined' not in selinux_context_result.stderr"
   changed_when: selinux_context_result.rc == 0
 
 - name: Apply SELinux context to NFS storage directory
@@ -51,22 +68,33 @@
 
 - name: Create systemd containers directory
   file:
-    path: /etc/containers/systemd
+    path: "{{ nfs_quadlet_dir }}"
     state: directory
     mode: '0755'
 
 - name: Create NFS server Quadlet container file
   template:
     src: nfs-server.container.j2
-    dest: /etc/containers/systemd/{{ nfs_container_name }}.container
+    dest: "{{ nfs_quadlet_dir }}/{{ nfs_container_name }}.container"
     mode: '0644'
   notify:
     - reload systemd
     - enable nfs container service
 
-- name: Verify NFS server is accessible
+- name: Wait for NFS container to start
   wait_for:
     port: "{{ nfs_host_port }}"
     host: "localhost"
     delay: 5
-    timeout: 30
+    timeout: 60
+
+- name: Verify NFS exports are available
+  command: showmount -e localhost
+  register: nfs_exports
+  retries: 3
+  delay: 10
+  until: nfs_exports.rc == 0
+
+- name: Display NFS exports
+  debug:
+    msg: "NFS exports: {{ nfs_exports.stdout_lines }}"

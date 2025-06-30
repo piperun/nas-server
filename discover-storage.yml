@@ -1,0 +1,231 @@
+---
+# Storage Discovery Playbook
+# Discovers available block devices on target hosts and generates a template
+# for storage_config.yml configuration
+#
+# Usage: ansible-playbook discover-storage.yml -l target-host
+# Output: discovered_storage_template.yml (review before importing)
+
+- name: Discover Storage Devices
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    output_file: "discovered_storage_template.yml"
+    excluded_fs_types:
+      - tmpfs
+      - devtmpfs
+      - proc
+      - sysfs
+      - cgroup
+      - cgroup2
+      - pstore
+      - bpf
+      - tracefs
+      - debugfs
+      - mqueue
+      - hugetlbfs
+      - systemd-1
+      - autofs
+      - efivarfs
+      - binfmt_misc
+      - configfs
+      - fuse.gvfsd-fuse
+      - overlay
+    excluded_mount_points:
+      - "/"
+      - "/boot"
+      - "/boot/efi"
+      - "/sys"
+      - "/proc"
+      - "/dev"
+      - "/run"
+      - "/tmp"
+      - "/var/tmp"
+      - "/home"
+      - "/usr"
+      - "/var"
+      - "/opt"
+
+  tasks:
+    - name: Gather block device information
+      setup:
+        gather_subset:
+          - hardware
+          - mounts
+
+    - name: Get detailed block device information
+      command: lsblk -J -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,UUID,PARTUUID
+      register: lsblk_output
+      changed_when: false
+
+    - name: Parse lsblk output
+      set_fact:
+        lsblk_data: "{{ lsblk_output.stdout | from_json }}"
+
+    - name: Debug lsblk data
+      debug:
+        var: lsblk_data
+        
+    - name: Initialize drives list
+      set_fact:
+        drives_list: []
+        
+    - name: Extract all usable devices (simplified)
+      set_fact:
+        drives_list: >-
+          {% set drives = [] %}
+          {% for device in lsblk_data.blockdevices %}
+            {% if device.type == 'disk' and device.size %}
+              {% if device.children is defined %}
+                {% for child in device.children %}
+                  {% if child.type == 'part' and child.size and (child.mountpoint is not defined or child.mountpoint == '' or child.mountpoint not in excluded_mount_points) %}
+                    {% set drive_item = {
+                      'name': child.name.replace('/', '_'),
+                      'device': '/dev/' + child.name,
+                      'size': child.size,
+                      'fstype': child.fstype | default('unknown'),
+                      'uuid': child.uuid | default(''),
+                      'partuuid': child.partuuid | default(''),
+                      'mountpoint': child.mountpoint | default(''),
+                      'parent_device': device.name
+                    } %}
+                    {% set _ = drives.append(drive_item) %}
+                  {% endif %}
+                {% endfor %}
+              {% else %}
+                {% if device.mountpoint is not defined or device.mountpoint == '' or device.mountpoint not in excluded_mount_points %}
+                  {% set drive_item = {
+                    'name': device.name,
+                    'device': '/dev/' + device.name,
+                    'size': device.size,
+                    'fstype': device.fstype | default('unformatted'),
+                    'uuid': device.uuid | default(''),
+                    'partuuid': device.partuuid | default(''),
+                    'mountpoint': device.mountpoint | default(''),
+                    'parent_device': device.name
+                  } %}
+                  {% set _ = drives.append(drive_item) %}
+                {% endif %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {{ drives }}
+
+    - name: Debug drives list
+      debug:
+        var: drives_list
+        
+    - name: Convert to proper list  
+      set_fact:
+        drives_list: "{{ drives_list | trim | replace(\"'\", '\"') | replace('None', 'null') | from_json }}"
+
+    - name: Generate storage configuration template
+      delegate_to: localhost
+      become: false
+      copy:
+        content: |
+          ---
+          # Generated Storage and Encryption Configuration Template
+          # Generated on: {{ ansible_date_time.iso8601 }}
+          # Source host: {{ inventory_hostname }}
+          # 
+          # IMPORTANT: Review and modify this template before importing into your config files
+          # 
+          # This file generates BOTH storage_config.yml AND encryption_config.yml sections
+          # Copy the sections below to their respective files
+          
+          # ==========================================================================
+          # ENCRYPTION_CONFIG.YML - Copy this section to encryption_config.yml
+          # ==========================================================================
+          
+          # LUKS encryption keyfiles configuration (add keys as needed)
+          luks_keyfiles:
+          {% for drive in drives_list %}
+          {% if loop.index <= 3 %}
+            {{ drive.name }}_key:
+              source: "luks-keys/{{ drive.name }}.key"
+              description: "{{ drive.name | title }} drive encryption key"
+          {% endif %}
+          {% endfor %}
+          
+          # Drives to encrypt (configure as needed)
+          encrypt:
+            # Example encrypted drive - uncomment and modify
+            # - device: "{{ drives_list[0].device if drives_list | length > 0 else '/dev/sda1' }}"
+            #   luks_name: "{{ drives_list[0].name if drives_list | length > 0 else 'media' }}-encrypted"
+            #   luks_keys:
+            #     - key: "{{ drives_list[0].name if drives_list | length > 0 else 'drive1' }}_key"
+            #       slot: 0
+            #   description: "{{ drives_list[0].name | title if drives_list | length > 0 else 'Media' }} drive encryption"
+          
+          # ==========================================================================
+          # STORAGE_CONFIG.YML - Copy this section to storage_config.yml
+          # ==========================================================================
+          
+          # Storage drives definition
+          # Total drives found: {{ drives_list | length }}
+          storage_drives:
+          {% for drive in drives_list %}
+            # Drive {{ loop.index }}: {{ drive.name }} ({{ drive.size }})
+            - name: "{{ drive.name }}"
+              description: "{{ drive.name | title }} storage ({{ drive.size }})"
+              device: "{{ drive.device }}"
+              # If format is not defined or is false we skip formatting
+              format: {% if drive.fstype == 'unknown' or drive.fstype == 'unformatted' %}true{% else %}false{% endif %}  # REVIEW THIS
+              # If fstype is not defined when format is false, formatting is skipped
+              {% if drive.fstype != 'unknown' and drive.fstype != 'unformatted' %}
+              # fstype: "{{ drive.fstype }}"  # Existing filesystem detected
+              {% else %}
+              fstype: "btrfs"  # Default for new drives - CHANGE AS NEEDED
+              {% endif %}
+              
+              # Current status (informational)
+              # current_fstype: "{{ drive.fstype }}"
+              # current_mountpoint: "{{ drive.mountpoint | default('unmounted') }}"
+              # size: "{{ drive.size }}"
+              # uuid: "{{ drive.uuid }}"
+          
+          {% endfor %}
+          
+          # Mount configurations
+          mounts:
+          {% for drive in drives_list %}
+            # Mount for {{ drive.name }}
+            - storage_drive: "{{ drive.name }}"  # References storage_drives name above
+              mount_point: "/var/mnt/{{ drive.name }}"  # CHANGE THIS
+              mount_options: "defaults,noatime,nodev,nosuid"
+              owner: "root"
+              group: "root"
+              mode: "0755"
+              # Service integration
+              nfs_export: false    # Set to true for NFS export
+              samba_share: false   # Set to true for Samba share
+          
+          {% endfor %}
+          
+          # Summary of discovered drives:
+          {% for drive in drives_list %}
+          # - {{ drive.device }} ({{ drive.size }}) - {{ drive.fstype }}{% if drive.mountpoint %} - mounted at {{ drive.mountpoint }}{% endif %}
+          {% endfor %}
+        dest: "{{ output_file }}"
+        mode: '0644'
+
+    - name: Display summary
+      debug:
+        msg: |
+          Storage discovery completed!
+          
+          Found {{ drives_list | length }} suitable storage device(s):
+          {% for drive in drives_list %}
+          - {{ drive.device }} ({{ drive.size }}) - {{ drive.fstype }}{% if drive.mountpoint %} - mounted at {{ drive.mountpoint }}{% endif %}
+          {% endfor %}
+          
+          Generated template file: {{ output_file }}
+          
+          Next steps:
+          1. Review the generated {{ output_file }}
+          2. Modify mount points, encryption, and service settings
+          3. Import or copy sections into your storage_config.yml
+          4. Generate LUKS keys if using encryption
+          5. Run the main deployment playbook

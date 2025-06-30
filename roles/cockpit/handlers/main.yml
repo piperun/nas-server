@@ -1,15 +1,12 @@
 ---
-- name: reboot system
-  reboot:
-    reboot_timeout: "{{ reboot_timeout }}"
-    msg: "Rebooting to apply rpm-ostree changes"
+# roles/cockpit/handlers/main.yml
 
-- name: restart sshd
-  systemd:
+- name: Restart sshd
+  ansible.builtin.systemd:
     name: sshd
     state: restarted
 
-- name: reload firewalld
-  systemd:
-    name: firewalld
-    state: reloaded
+- name: Reboot to apply OS changes
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+    test_command: uptime

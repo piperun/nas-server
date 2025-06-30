@@ -1,4 +1,6 @@
 ---
+# roles/encrypt/handlers/main.yml
+
 - name: Reboot to apply OS changes
   reboot:
     msg: "Rebooting to apply layered package changes for encryption"

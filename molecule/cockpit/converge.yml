@@ -1,0 +1,33 @@
+---
+# Cockpit role-specific converge playbook
+
+- name: Converge - Test Cockpit Web Console
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Install required packages
+      package:
+        name:
+          - systemd
+          - firewalld
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Start firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: true
+      ignore_errors: true
+      
+    - name: Ensure systemd-logind is running
+      systemd:
+        name: systemd-logind
+        state: started
+        enabled: true
+      ignore_errors: true
+  
+  roles:
+    - role: cockpit

@@ -1,0 +1,54 @@
+---
+# VueTorrent-specific Molecule test configuration
+# Tests only the vuetorrent role
+
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: vuetorrent-test
+    image: registry.fedoraproject.org/fedora:latest
+    pre_build_image: true
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    command: sleep infinity
+    published_ports: []  # Test internally only
+    networks:
+      - name: molecule
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: '../../roles'
+  inventory:
+    host_vars:
+      vuetorrent-test:
+        # VueTorrent-specific test configuration
+        storage_drives:
+          - name: "downloads"
+            description: "Downloads directory"
+            device: "/dev/mock-sdb1"
+            mount_point: "/var/mnt/downloads"
+            fstype: "ext4"
+            encrypt: false
+            format: false
+            mount_options: "defaults,noatime"
+            nfs_export: false
+            samba_share: false
+            owner: "root"
+            group: "root"
+            mode: "0755"
+            
+        # Mock vault variables for VueTorrent
+        vault_vuetorrent_username: "testadmin"
+        vault_vuetorrent_password: "testpass123"
+        vuetorrent_username: "{{ vault_vuetorrent_username }}"
+        vuetorrent_password: "{{ vault_vuetorrent_password }}"
+
+verifier:
+  name: ansible

@@ -1,0 +1,36 @@
+---
+# Encryption Configuration
+# This file defines LUKS encryption settings for drives
+# Only needed if you want to encrypt storage drives
+
+# LUKS encryption keyfiles configuration
+luks_keyfiles:
+  # Each key should have a unique name and source path
+  drive1:
+    source: "luks-keys/drive1.key"
+    description: "Media drive encryption key"
+  drive2:
+    source: "luks-keys/drive2.key"
+    description: "Backup drive encryption key"
+  # Add more keys as needed
+  # drive3:
+  #   source: "luks-keys/drive3.key"
+  #   description: "Additional drive key"
+
+# Drives to encrypt
+encrypt:
+  # Media storage drive encryption
+  - device: "/dev/sda1"
+    luks_name: "media-encrypted"
+    luks_keys:
+      - key: "drive1"        # References luks_keyfiles above
+        slot: 0              # LUKS key slot (0-7)
+    description: "Primary media storage encryption"
+
+  # Add more encrypted drives as needed
+  # - device: "/dev/sdc1"
+  #   luks_name: "backup-encrypted"
+  #   luks_keys:
+  #     - key: "drive2"
+  #       slot: 0
+  #   description: "Backup drive encryption"

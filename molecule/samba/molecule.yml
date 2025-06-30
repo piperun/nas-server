@@ -1,0 +1,63 @@
+---
+# Samba-specific Molecule test configuration
+# Tests only the samba-server role
+
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: samba-test
+    image: registry.fedoraproject.org/fedora:latest
+    pre_build_image: true
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    command: sleep infinity
+    published_ports: []  # Test internally only
+    networks:
+      - name: molecule
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: '../../roles'
+  inventory:
+    host_vars:
+      samba-test:
+        # Samba-specific test configuration
+        storage_drives:
+          - name: "samba-test-share"
+            description: "Test Samba share"
+            device: "/dev/mock-sdb1"  
+            mount_point: "/var/mnt/samba-test"
+            fstype: "ext4"
+            encrypt: false
+            format: false
+            mount_options: "defaults,noatime"
+            nfs_export: false
+            samba_share: true
+            owner: "root"
+            group: "root"
+            mode: "0755"
+            
+        # Mock vault variables for Samba
+        vault_samba_users:
+          - username: "testuser"
+            password: "testpass123"
+            uid: "1001"
+          - username: "admin"
+            password: "adminpass123"  
+            uid: "1000"
+        samba_users: "{{ vault_samba_users }}"
+        
+        # Auto-generate samba storage mounts
+        samba_storage_mounts:
+          - host_path: "/var/mnt/samba-test"
+            container_path: "/shares/samba-test-share"
+
+verifier:
+  name: ansible

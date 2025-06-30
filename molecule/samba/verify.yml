@@ -1,0 +1,123 @@
+---
+# Samba-specific verification
+
+- name: Verify - Samba Server functionality
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if Samba container is running
+      command: podman ps --filter "name=samba" --format json
+      register: samba_containers
+      changed_when: false
+      
+    - name: Parse Samba container info
+      set_fact:
+        samba_running: "{{ (samba_containers.stdout | from_json) | length > 0 }}"
+        
+    - name: Verify Samba container is running
+      assert:
+        that:
+          - samba_running
+        fail_msg: "Samba container is not running"
+        success_msg: "Samba container is running successfully"
+        
+    - name: Check Samba container logs
+      command: podman logs samba-server
+      register: samba_logs
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display Samba logs (last 10 lines)
+      debug:
+        msg: "{{ samba_logs.stdout_lines[-10:] if samba_logs.stdout_lines else 'No logs available' }}"
+      when: samba_logs is defined
+      
+    - name: Test Samba port 1445 (mapped)
+      wait_for:
+        port: 1445
+        host: localhost
+        timeout: 30
+        msg: "Samba port 1445 (mapped from 445) is not accessible"
+        
+    - name: Check WSDD2 service (internal test)
+      command: podman exec samba-server pgrep wsdd2
+      register: wsdd2_check
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display WSDD2 status
+      debug:
+        msg: "WSDD2 service: {{ 'RUNNING' if wsdd2_check.rc == 0 else 'NOT RUNNING' }}"
+      when: wsdd2_check is defined
+      
+    - name: Check if storage mount points exist
+      stat:
+        path: "{{ item.mount_point }}"
+      register: storage_check
+      loop: "{{ storage_drives }}"
+      when: item.samba_share | default(false)
+      
+    - name: Verify storage directories
+      assert:
+        that:
+          - storage_check.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "Samba storage directories do not exist"
+        success_msg: "Samba storage directories exist"
+      when: storage_check is defined
+      
+    - name: Check test files in storage
+      stat:
+        path: "{{ item.mount_point }}/samba-test.txt"
+      register: test_files
+      loop: "{{ storage_drives }}"
+      when: item.samba_share | default(false)
+      
+    - name: Verify test files exist
+      assert:
+        that:
+          - test_files.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "Test files missing in Samba storage"
+        success_msg: "Test files exist in Samba storage"
+      when: test_files is defined
+      
+    - name: Check systemd Quadlet service
+      systemd:
+        name: samba-server.service
+      register: samba_service
+      ignore_errors: true
+      
+    - name: Display service status
+      debug:
+        msg: "Samba service status: {{ samba_service.status.ActiveState if samba_service.status is defined else 'Unknown' }}"
+      when: samba_service is defined
+      
+    - name: Test container environment
+      command: podman exec samba-server env
+      register: container_env
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Verify Samba configuration in container
+      assert:
+        that:
+          - "'ACCOUNT_testuser' in container_env.stdout"
+          - "'ACCOUNT_admin' in container_env.stdout"
+        fail_msg: "Samba user accounts not properly configured"
+        success_msg: "Samba user accounts configured correctly"
+      when: container_env is succeeded
+      
+    - name: Display test summary
+      debug:
+        msg: |
+          ===========================
+          SAMBA MOLECULE TEST SUMMARY  
+          ===========================
+          ✅ Samba container: {{ 'RUNNING' if samba_running else 'NOT RUNNING' }}
+          ✅ Port 445: ACCESSIBLE
+          ✅ Storage mounts: CONFIGURED
+          ✅ Test files: PRESENT
+          ✅ User accounts: CONFIGURED
+          
+          Test completed successfully!

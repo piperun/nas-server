@@ -1,0 +1,8 @@
+---
+# roles/samba-server/handlers/main.yml
+
+- name: Restart samba container
+  ansible.builtin.systemd:
+    name: "{{ samba_container_name }}.service"
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,83 @@
+# This file is managed by Ansible.
+# It will be placed in {{ samba_quadlet_dir }}
+# Quadlet will use this to generate a systemd service.
+
+[Unit]
+Description=Samba Server Container (ServerContainers)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName={{ samba_container_name }}
+Image={{ samba_image }}
+# Use host networking for Avahi/mDNS discovery and WSDD2
+Network=host
+
+# Environment variables for Samba configuration
+Environment=TZ={{ samba_timezone }}
+Environment=SAMBA_CONF_WORKGROUP={{ samba_workgroup }}
+Environment=SAMBA_CONF_SERVER_STRING={{ samba_server_string }}
+Environment=SAMBA_CONF_LOG_LEVEL={{ samba_log_level }}
+Environment=SAMBA_CONF_SERVER_ROLE={{ samba_server_role }}
+Environment=SAMBA_CONF_MAP_TO_GUEST={{ samba_map_to_guest }}
+
+# Avahi configuration
+{% if not samba_avahi_disable %}
+Environment=AVAHI_NAME={{ samba_avahi_name }}
+Environment=MODEL={{ samba_model }}
+{% else %}
+Environment=AVAHI_DISABLE=1
+{% endif %}
+
+# WSDD2 configuration
+{% if samba_wsdd2_disable %}
+Environment=WSDD2_DISABLE=1
+{% else %}
+{% if samba_wsdd2_parameters %}
+Environment=WSDD2_PARAMETERS={{ samba_wsdd2_parameters }}
+{% endif %}
+{% endif %}
+
+# NetBIOS configuration
+{% if samba_netbios_disable %}
+Environment=NETBIOS_DISABLE=1
+{% endif %}
+
+# Global Samba configuration
+{% for key, value in samba_global_config.items() %}
+Environment=SAMBA_GLOBAL_CONFIG_{{ key | replace(' ', '_') | replace(':', '_') | upper }}={{ value }}
+{% endfor %}
+
+# User accounts
+{% for user in samba_users %}
+Environment=ACCOUNT_{{ user.username }}={{ user.password }}
+{% if user.uid is defined %}
+Environment=UID_{{ user.username }}={{ user.uid }}
+{% endif %}
+{% if user.groups is defined and user.groups | length > 0 %}
+Environment=GROUPS_{{ user.username }}={{ user.groups | join(',') }}
+{% endif %}
+{% endfor %}
+
+# Samba volume configurations
+{% for share in samba_shares %}
+Environment=SAMBA_VOLUME_CONFIG_{{ share.name }}={% for key, value in share.config.items() %}{{ key }}={{ value }};{% endfor %}path={{ share.path }};comment={{ share.comment }}
+{% endfor %}
+
+# Volume mounts
+{% for mount in samba_storage_mounts %}
+Volume={{ mount.host_path }}:{{ mount.container_path }}:Z
+{% endfor %}
+
+# Security capabilities
+{% if samba_cap_net_admin %}
+AddCapability=CAP_NET_ADMIN
+{% endif %}
+SecurityLabelDisable=false
+
+[Service]
+Restart=unless-stopped
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

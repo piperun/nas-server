@@ -1,0 +1,85 @@
+---
+# Default Molecule configuration for full playbook testing
+# Tests all containerized services together
+
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+
+driver:
+  name: podman
+
+platforms:
+  - name: nas-test-instance
+    image: registry.fedoraproject.org/fedora:latest
+    pre_build_image: true
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    command: sleep infinity
+    published_ports: []  # Test internally only
+    networks:
+      - name: molecule
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: '../../roles'
+  inventory:
+    host_vars:
+      nas-test-instance:
+        # Mock storage configuration for testing
+        storage_drives:
+          - name: "test-media"
+            description: "Test media storage"
+            device: "/dev/mock-sdb1"
+            mount_point: "/var/mnt/test-media"
+            fstype: "ext4"
+            encrypt: false
+            format: false
+            mount_options: "defaults,noatime"
+            nfs_export: true
+            samba_share: true
+            owner: "root"
+            group: "root"
+            mode: "0755"
+        
+        # Auto-generate service configurations like main vars.yml
+        nfs_drives: "{{ storage_drives | selectattr('nfs_export', 'equalto', true) | map(attribute='name') | list }}"
+        samba_storage_mounts:
+          - host_path: "/var/mnt/test-media"
+            container_path: "/shares/test-media"
+        
+        # Mock vault variables
+        vault_become_password: "test123"
+        vault_samba_users:
+          - username: "testuser"
+            password: "testpass"
+            uid: "1001"
+        samba_users: "{{ vault_samba_users }}"
+        vault_vuetorrent_username: "admin"
+        vault_vuetorrent_password: "admin123"
+        vuetorrent_username: "{{ vault_vuetorrent_username }}"
+        vuetorrent_password: "{{ vault_vuetorrent_password }}"
+        vault_cockpit_admin_password: "cockpit123"
+        cockpit_admin_password: "{{ vault_cockpit_admin_password }}"
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - side_effect
+    - verify
+    - cleanup
+    - destroy

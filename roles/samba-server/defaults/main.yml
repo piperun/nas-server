@@ -1,0 +1,70 @@
+---
+# roles/samba-server/defaults/main.yml
+
+# Docker image for the Samba server (ServerContainers)
+samba_image: "ghcr.io/servercontainers/samba:latest"
+
+# Container configuration
+samba_container_name: "samba"
+samba_quadlet_dir: "/etc/containers/systemd/"
+
+# Network configuration
+samba_hostname: "nas-server"
+samba_workgroup: "WORKGROUP"
+samba_server_string: "NAS Server"
+
+# Avahi/Zeroconf configuration
+samba_avahi_name: "{{ samba_hostname }}"
+samba_avahi_disable: false
+samba_model: "TimeCapsule"
+
+# WSDD2 (Windows Service Discovery) configuration
+samba_wsdd2_disable: false
+samba_wsdd2_parameters: ""
+
+# NetBIOS configuration
+samba_netbios_disable: false
+
+# Global Samba configuration
+samba_log_level: "1"
+samba_server_role: "standalone server"
+samba_map_to_guest: "Bad User"
+samba_timezone: "Etc/UTC"
+
+# Security and performance settings
+samba_global_config:
+  # Security
+  "server min protocol": "SMB3_11"
+  "server max protocol": "SMB3_11" 
+  "client min protocol": "SMB3_11"
+  "client max protocol": "SMB3_11"
+  "server signing": "mandatory"
+  "client signing": "mandatory"
+  "smb encrypt": "desired"
+  
+  # Performance
+  "socket options": "TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=524288 SO_SNDBUF=524288"
+  "deadtime": "15"
+  "getwd cache": "yes"
+  "use sendfile": "yes"
+  "aio read size": "16384"
+  "aio write size": "16384"
+  "large readwrite": "yes"
+  "max xmit": "65536"
+  "read raw": "yes"
+  "write raw": "yes"
+  
+  # MacOS compatibility
+  "vfs objects": "catia fruit streams_xattr"
+  "fruit:metadata": "stream"
+  "fruit:model": "MacSamba"
+  "fruit:posix_rename": "yes"
+  "fruit:veto_appledouble": "no"
+  "fruit:wipe_intentionally_left_blank_rfork": "yes"
+  "fruit:delete_empty_adfiles": "yes"
+
+# Capabilities
+samba_cap_net_admin: true
+
+# Default mount options
+mount_default_options: "defaults,noatime"

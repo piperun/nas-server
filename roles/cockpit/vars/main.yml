@@ -1,5 +1,0 @@
----
-# Variables for cockpit role
-ssh_config_dir: "/etc/ssh/sshd_config.d"
-ssh_config_file: "02-enable-passwords.conf"
-cockpit_service_name: "cockpit.service"

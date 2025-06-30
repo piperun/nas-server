@@ -5,3 +5,4 @@ hosts
 inventory/*
 inventories/*
 host_vars/nas-server.yml
+host_vars/nas-server.yml

@@ -1,0 +1,61 @@
+---
+# NFS-specific Molecule test configuration
+# Tests only the nfs-server role
+
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: nfs-test
+    image: registry.fedoraproject.org/fedora:latest
+    pre_build_image: true
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    command: sleep infinity
+    published_ports: []  # Test internally only
+    networks:
+      - name: molecule
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: '../../roles'
+  inventory:
+    host_vars:
+      nfs-test:
+        # NFS-specific test configuration
+        storage_drives:
+          - name: "nfs-test-export"
+            description: "Test NFS export"
+            device: "/dev/mock-sdb1"
+            mount_point: "/var/mnt/nfs-test"
+            fstype: "ext4"
+            encrypt: false
+            format: false
+            mount_options: "defaults,noatime"
+            nfs_export: true
+            samba_share: false
+            owner: "root"
+            group: "root"
+            mode: "0755"
+          - name: "nfs-shared-data"
+            description: "Shared NFS data"
+            device: "/dev/mock-sdc1"
+            mount_point: "/var/mnt/shared"
+            fstype: "ext4"
+            encrypt: false
+            format: false
+            mount_options: "defaults,noatime"
+            nfs_export: true
+            samba_share: false
+            owner: "root"
+            group: "root"
+            mode: "0755"
+
+verifier:
+  name: ansible

@@ -1,0 +1,246 @@
+---
+# Generated Storage Configuration Template
+# Generated on: 2025-06-28T11:55:12Z
+# Source host: nas-server
+# 
+# IMPORTANT: Review and modify this template before importing into storage_config.yml
+# 
+# Instructions:
+# 1. Review each drive configuration below
+# 2. Set appropriate mount_point for each drive
+# 3. Configure encryption settings (encrypt: true/false)
+# 4. Set service integration (nfs_export, samba_share)
+# 5. Either copy sections to storage_config.yml or import entire file
+
+# Discovered LUKS keyfiles configuration (add keys as needed)
+luks_keyfiles:
+  sda1_key:
+    source: "luks-keys/sda1.key"
+    description: "Sda1 drive encryption key"
+  sdb1_key:
+    source: "luks-keys/sdb1.key"
+    description: "Sdb1 drive encryption key"
+  sdc1_key:
+    source: "luks-keys/sdc1.key"
+    description: "Sdc1 drive encryption key"
+
+# Discovered storage drives
+# Total drives found: 6
+storage_drives:
+  # Drive 1: sda1
+  - name: "sda1"
+    description: "Sda1 storage (1.8T)"
+    device: "/dev/sda1"
+    mount_point: "/var/mnt/sda1"  # CHANGE THIS
+    fstype: "crypto_LUKS"
+    
+    # Current status
+    current_fstype: "crypto_LUKS"
+    current_mountpoint: ""
+    size: "1.8T"
+    uuid: "959a595a-0c60-45e2-b480-308c97abdc77"
+    partuuid: "5a7ca59c-ca58-4fd3-ab3b-320501065465"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "sda1-encrypted"
+    # luks_keys:
+    #   - key: "sda1_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+  # Drive 2: sdb1
+  - name: "sdb1"
+    description: "Sdb1 storage (931.5G)"
+    device: "/dev/sdb1"
+    mount_point: "/var/mnt/sdb1"  # CHANGE THIS
+    fstype: "crypto_LUKS"
+    
+    # Current status
+    current_fstype: "crypto_LUKS"
+    current_mountpoint: ""
+    size: "931.5G"
+    uuid: "f4ec1231-5803-4f94-9a3a-808a14eb8af1"
+    partuuid: "4e2a48f0-01"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "sdb1-encrypted"
+    # luks_keys:
+    #   - key: "sdb1_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+  # Drive 3: sdc1
+  - name: "sdc1"
+    description: "Sdc1 storage (10.9T)"
+    device: "/dev/sdc1"
+    mount_point: "/var/mnt/sdc1"  # CHANGE THIS
+    fstype: "LVM2_member"
+    
+    # Current status
+    current_fstype: "LVM2_member"
+    current_mountpoint: ""
+    size: "10.9T"
+    uuid: "LFj0Ob-1XEm-VOnk-8J6D-M3zN-AnV0-c5NBQ5"
+        partuuid: "6bae93ac-9ffe-b44f-8861-f275d0114605"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "sdc1-encrypted"
+    # luks_keys:
+    #   - key: "sdc1_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+  # Drive 4: sdd
+  - name: "sdd"
+    description: "Sdd storage (2.7T)"
+    device: "/dev/sdd"
+    mount_point: "/var/mnt/sdd"  # CHANGE THIS
+    fstype: "xfs"
+    
+    # Current status
+    current_fstype: "xfs"
+    current_mountpoint: ""
+    size: "2.7T"
+    uuid: "9bd8c3ad-ac24-477e-9b1b-5219c54e84a5"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "sdd-encrypted"
+    # luks_keys:
+    #   - key: "sdd_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+  # Drive 5: zram0
+  - name: "zram0"
+    description: "Zram0 storage (7.6G)"
+    device: "/dev/zram0"
+    mount_point: "/var/mnt/zram0"  # CHANGE THIS
+    fstype: "swap"
+    
+    # Current status
+    current_fstype: "swap"
+    current_mountpoint: "[SWAP]"
+    size: "7.6G"
+    uuid: "faa59048-289f-4792-8eb9-6abd366787bf"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "zram0-encrypted"
+    # luks_keys:
+    #   - key: "zram0_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+  # Drive 6: nvme0n1p3
+  - name: "nvme0n1p3"
+    description: "Nvme0n1p3 storage (464.2G)"
+    device: "/dev/nvme0n1p3"
+    mount_point: "/var/mnt/nvme0n1p3"  # CHANGE THIS
+    fstype: "btrfs"
+    
+    # Current status
+    current_fstype: "btrfs"
+    current_mountpoint: "/var/lib/containers/storage/overlay"
+    size: "464.2G"
+    uuid: "7da87f23-fcc8-4b56-b928-f9f5acd7213d"
+        partuuid: "223db8b8-841d-4dfb-931a-7dcffdc902d8"
+        
+    # Encryption settings - CONFIGURE THESE
+    encrypt: false               # Set to true if you want encryption
+    # luks_name: "nvme0n1p3-encrypted"
+    # luks_keys:
+    #   - key: "nvme0n1p3_key"
+    #     slot: 0
+    
+    # Formatting settings
+    format: false
+    
+    # Mount settings
+    mount_options: "defaults,noatime"
+    
+    # Service integration
+    nfs_export: false
+    samba_share: false
+    
+    # Ownership settings
+    owner: "root"
+    group: "root" 
+    mode: "0755"
+
+
+# Summary of discovered drives:
+# - /dev/sda1 (1.8T) - crypto_LUKS# - /dev/sdb1 (931.5G) - crypto_LUKS# - /dev/sdc1 (10.9T) - LVM2_member# - /dev/sdd (2.7T) - xfs# - /dev/zram0 (7.6G) - swap - mounted at [SWAP]# - /dev/nvme0n1p3 (464.2G) - btrfs - mounted at /var/lib/containers/storage/overlay

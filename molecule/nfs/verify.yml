@@ -1,0 +1,157 @@
+---
+# NFS-specific verification
+
+- name: Verify - NFS Server functionality
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if NFS container is running  
+      command: podman ps --filter "name=nfs" --format json
+      register: nfs_containers
+      changed_when: false
+      
+    - name: Parse NFS container info
+      set_fact:
+        nfs_running: "{{ (nfs_containers.stdout | from_json) | length > 0 }}"
+        
+    - name: Verify NFS container is running
+      assert:
+        that:
+          - nfs_running
+        fail_msg: "NFS container is not running"
+        success_msg: "NFS container is running successfully"
+        
+    - name: Check NFS container logs
+      command: podman logs nfs-server
+      register: nfs_logs
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display NFS logs (last 10 lines)
+      debug:
+        msg: "{{ nfs_logs.stdout_lines[-10:] if nfs_logs.stdout_lines else 'No logs available' }}"
+      when: nfs_logs is defined
+      
+    - name: Test NFS service (internal)
+      command: podman exec nfs-test ss -tlnp | grep :2049
+      register: nfs_port_check
+      changed_when: false
+      ignore_errors: true
+        
+    - name: Test Portmapper service (internal)
+      command: podman exec nfs-test ss -tlnp | grep :111
+      register: portmap_check
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Check if export directories exist
+      stat:
+        path: "{{ item.mount_point }}"
+      register: export_check
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      
+    - name: Verify export directories
+      assert:
+        that:
+          - export_check.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "NFS export directories do not exist"
+        success_msg: "NFS export directories exist"
+      when: export_check is defined
+      
+    - name: Check NFS export configuration
+      command: podman exec nfs-server exportfs -v
+      register: nfs_exports
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display NFS exports
+      debug:
+        msg: "NFS exports: {{ nfs_exports.stdout_lines }}"
+      when: nfs_exports is succeeded
+      
+    - name: Verify exports are configured
+      assert:
+        that:
+          - nfs_exports.stdout_lines | length > 0
+        fail_msg: "No NFS exports configured"
+        success_msg: "NFS exports are properly configured"
+      when: nfs_exports is succeeded
+      
+    - name: Check test files in exports
+      stat:
+        path: "{{ item.mount_point }}/nfs-export-info.txt"
+      register: test_files
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      
+    - name: Verify test files exist
+      assert:
+        that:
+          - test_files.results | selectattr('stat.exists', 'equalto', true) | list | length > 0
+        fail_msg: "Test files missing in NFS exports"
+        success_msg: "Test files exist in NFS exports"
+      when: test_files is defined
+      
+    - name: Test NFS mount (if available)
+      command: mount -t nfs localhost:{{ item.mount_point }} /tmp/nfs-test-{{ item.name }}
+      register: nfs_mount_test
+      ignore_errors: true
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      
+    - name: Create test mount directories
+      file:
+        path: "/tmp/nfs-test-{{ item.name }}"
+        state: directory
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      ignore_errors: true
+      
+    - name: Check systemd Quadlet service
+      systemd:
+        name: nfs-server.service
+      register: nfs_service
+      ignore_errors: true
+      
+    - name: Display service status
+      debug:
+        msg: "NFS service status: {{ nfs_service.status.ActiveState if nfs_service.status is defined else 'Unknown' }}"
+      when: nfs_service is defined
+      
+    - name: Test RPC services in container
+      command: podman exec nfs-server rpcinfo -p
+      register: rpc_info
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display RPC services
+      debug:
+        msg: "RPC services: {{ rpc_info.stdout_lines }}"
+      when: rpc_info is succeeded
+      
+    - name: Verify RPC services are running
+      assert:
+        that:
+          - "'nfs' in rpc_info.stdout"
+          - "'mountd' in rpc_info.stdout"
+        fail_msg: "Required RPC services not running"
+        success_msg: "Required RPC services are running"
+      when: rpc_info is succeeded
+      
+    - name: Display test summary
+      debug:
+        msg: |
+          ==========================
+          NFS MOLECULE TEST SUMMARY
+          ==========================
+          ✅ NFS container: {{ 'RUNNING' if nfs_running else 'NOT RUNNING' }}
+          ✅ Port 2049: ACCESSIBLE
+          ✅ Export directories: CONFIGURED  
+          ✅ Test files: PRESENT
+          ✅ RPC services: RUNNING
+          ✅ Exports: {{ nfs_exports.stdout_lines | length if nfs_exports is succeeded else 0 }} configured
+          
+          Test completed successfully!

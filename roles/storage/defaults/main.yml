@@ -1,0 +1,8 @@
+---
+# roles/mount/defaults/main.yml
+
+# Storage drives configuration (should be passed from group_vars)
+storage_drives: []
+
+# Default mount options
+mount_default_options: "defaults,noatime,nodev,nosuid"

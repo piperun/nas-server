@@ -1,27 +1,21 @@
 ---
-# ==> NFS Server Container Settings
+# roles/nfs-server/defaults/main.yml
+
+# NFS Server Container Settings
 nfs_container_name: "nfs-server"
 nfs_container_image: "docker.io/gists/nfs-server"
 
-# ==> NFS Export Path Configuration
-# The main folder name that will be shared over NFS
+# NFS Export Path Configuration
 nfs_main_export_name: "shared"
-# The base directory on the host where all NFS data will be organized
 nfs_base_path: "/var/srv/nfs"
-# The final, full path that the container will export.
 nfs_export_path: "{{ nfs_base_path }}/{{ nfs_main_export_name }}"
 
-# ==> Drive Configuration
-# This is where you define the extra hard drives to mount for NFS.
-# This list is empty by default and should be overridden in your host_vars.
-# Example:
-# nfs_drives:
-#   - name: "media"
-#     device: "/dev/sdb1"
-#     mount_point: "/var/mnt/media"
-#     fstype: "ext4"
+# Drive Configuration
 nfs_drives: []
 
-# ==> Network and Firewall Settings
+# Network and Firewall Settings
 nfs_host_port: 2049
 nfs_firewall_service: "nfs"
+
+# Quadlet directory
+nfs_quadlet_dir: "/etc/containers/systemd/"

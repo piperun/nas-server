@@ -1,0 +1,35 @@
+---
+# Main configuration for NAS servers
+# This file references vault-encrypted variables and central storage config
+
+# Ansible become configuration
+ansible_become_password: "{{ vault_become_password }}"
+
+# Include central storage and encryption configuration
+# Import storage and mount configuration from centralized files
+storage_drives: "{{ lookup('file', 'storage_config.yml') | from_yaml | json_query('storage_drives') }}"
+storage_mounts: "{{ lookup('file', 'storage_config.yml') | from_yaml | json_query('mounts') }}"
+
+# Import encryption configuration (optional)
+encryption_config: "{{ lookup('file', 'encryption_config.yml') | from_yaml | default({}) }}"
+luks_keyfiles: "{{ (encryption_config.luks_keyfiles | default({})) | combine(vault_luks_keyfiles | default({})) }}"
+encrypt_drives: "{{ encryption_config.encrypt | default([]) }}"
+
+# Auto-generate service configurations from storage mounts
+# NFS configuration - auto-generated from mounts with nfs_export: true
+nfs_mounts: "{{ storage_mounts | selectattr('nfs_export', 'equalto', true) | list }}"
+
+# Samba configuration - use vault variables
+samba_users: "{{ vault_samba_users }}"
+
+# Define Samba configuration directly based on storage_config.yml
+# This will be populated at runtime from storage_mounts with samba_share: true
+samba_storage_mounts: []
+samba_shares: []
+
+# VueTorrent configuration
+vuetorrent_username: "{{ vault_vuetorrent_username }}"
+vuetorrent_password: "{{ vault_vuetorrent_password }}"
+
+# Additional vault-secured variables
+cockpit_admin_password: "{{ vault_cockpit_admin_password | default('') }}"

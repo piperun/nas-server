@@ -1,0 +1,24 @@
+---
+# roles/vuetorrent/defaults/main.yml
+
+# Docker image for VueTorrent (qBittorrent with VueTorrent UI)
+vuetorrent_image: "3xpo/alpine-vuetorrent:latest"
+
+# Container configuration
+vuetorrent_container_name: "vuetorrent"
+vuetorrent_quadlet_dir: "/etc/containers/systemd/"
+
+# Network configuration
+vuetorrent_webui_port: "8080"
+vuetorrent_torrent_port: "6881"
+
+# Volume configuration
+vuetorrent_config_path: "/var/lib/vuetorrent/config"
+vuetorrent_downloads_path: "/var/lib/vuetorrent/downloads"
+
+# User credentials (override with vault variables)
+vuetorrent_username: "admin"
+vuetorrent_password: "changeme"
+
+# Timezone
+vuetorrent_timezone: "Etc/UTC"

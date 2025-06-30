@@ -1,17 +1,9 @@
 ---
-# Default variables for cockpit role
-cockpit_packages:
-  - cockpit-system
-  - cockpit-ostree
-  - cockpit-podman
-  - cockpit-networkmanager
+# roles/cockpit/defaults/main.yml
 
-cockpit_additional_packages: []
+# Cockpit configuration
+cockpit_port: 9090
+cockpit_service_name: "cockpit.service"
 
-enable_password_auth: true
-cockpit_firewall_service: cockpit
-cockpit_container_image: "quay.io/cockpit/ws"
-cockpit_container_name: "cockpit-ws"
-
-# Reboot timeout
-reboot_timeout: 600
+# Firewall configuration
+cockpit_firewall_service: "cockpit"

@@ -1,0 +1,45 @@
+---
+- name: Deploy Samba Server (ServerContainers)
+  hosts: nas_servers
+  become: yes
+  
+  tasks:
+    - name: Gather service facts explicitly
+      ansible.builtin.service_facts:
+  
+  roles:
+    - role: samba-server
+
+  post_tasks:
+    - name: Display Samba access information
+      debug:
+        msg: |
+          Samba Server (ServerContainers) setup complete!
+          
+          Server Details:
+          - Hostname: {{ samba_hostname }}
+          - Workgroup: {{ samba_workgroup }}
+          - Server String: {{ samba_server_string }}
+          
+          Network Access:
+          {% if not samba_avahi_disable %}
+          - Avahi/Bonjour: {{ samba_avahi_name }}.local
+          {% endif %}
+          {% if not samba_wsdd2_disable %}
+          - Windows Discovery: Enabled
+          {% endif %}
+          - Direct IP: {{ ansible_default_ipv4.address }}
+          
+          Security:
+          - Protocol: SMB3.11 only (mandatory signing & encryption)
+          - Authentication: User accounts required
+          
+          Available Shares:
+          {% for share in samba_shares %}
+          - \\{{ ansible_default_ipv4.address }}\{{ share.name }} ({{ share.comment }})
+          {% endfor %}
+          
+          Storage Mounts:
+          {% for mount in samba_storage_mounts %}
+          - {{ mount.host_path }} -> {{ mount.container_path }}
+          {% endfor %}

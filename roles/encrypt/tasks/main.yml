@@ -1,11 +1,22 @@
 ---
-- name: "ENCRYPT | Ensure cryptsetup is layered"
+# roles/encrypt/tasks/main.yml
+
+- name: "Validate LUKS configuration"
+  ansible.builtin.assert:
+    that:
+      - encrypt_drives is defined
+      - encrypt_drives | length > 0
+    fail_msg: "No storage drives configured for encryption"
+    success_msg: "LUKS encryption configuration validated"
+
+- name: "Ensure cryptsetup is layered"
   community.general.rpm_ostree_pkg:
     name: cryptsetup
     state: present
+  when: encrypt_drives | length > 0
   notify: Reboot to apply OS changes
 
-- name: "ENCRYPT | Create directory for LUKS keyfiles"
+- name: "Create directory for LUKS keyfiles"
   file:
     path: /etc/luks-keys
     state: directory
@@ -13,7 +24,18 @@
     group: root
     mode: '0700'
 
-- name: "ENCRYPT | Copy LUKS keyfiles to remote host"
+- name: "Validate LUKS keyfiles exist locally"
+  ansible.builtin.stat:
+    path: "{{ item.value.source }}"
+  loop: "{{ luks_keyfiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: localhost
+  run_once: true
+  register: local_keyfiles
+  failed_when: not local_keyfiles.stat.exists
+
+- name: "Copy LUKS keyfiles to remote host"
   copy:
     src: "{{ item.value.source }}"
     dest: "/etc/luks-keys/{{ item.key }}.key"
@@ -24,21 +46,124 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: "ENCRYPT | Format devices with LUKS"
+- name: "Format devices with LUKS"
   community.crypto.luks_device:
     device: "{{ item.device }}"
     state: present
     keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
-  loop: "{{ storage_drives | selectattr('encrypt', 'equalto', true) }}"
+  loop: "{{ encrypt_drives }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.description | default(item.device) }}"
 
-- name: "ENCRYPT | Open LUKS devices"
+- name: "Open LUKS devices"
   community.crypto.luks_device:
     device: "{{ item.device }}"
     state: opened
     name: "{{ item.luks_name }}"
     keyfile: "/etc/luks-keys/{{ (item.luks_keys | selectattr('slot', 'equalto', 0) | first).key }}.key"
-  loop: "{{ storage_drives | selectattr('encrypt', 'equalto', true) }}"
+  loop: "{{ encrypt_drives }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.description | default(item.device) }}"
+  register: luks_open_result
+
+- name: "Verify LUKS devices are accessible"
+  ansible.builtin.stat:
+    path: "/dev/mapper/{{ item.luks_name }}"
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+  register: luks_device_check
+  failed_when: not luks_device_check.stat.exists
+
+- name: "Test mount encrypted devices (validation)"
+  ansible.builtin.mount:
+    src: "/dev/mapper/{{ item.luks_name }}"
+    path: "/tmp/luks-test-{{ item.luks_name }}"
+    fstype: "auto"
+    state: mounted
+    opts: "noatime"
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+  register: luks_mount_test
+
+- name: "Create test directory structure on encrypted devices"
+  ansible.builtin.file:
+    path: "/tmp/luks-test-{{ item.luks_name }}/.encryption-test"
+    state: directory
+    mode: '0755'
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Write test file to encrypted devices"
+  ansible.builtin.copy:
+    content: |
+      LUKS encryption test for {{ item.description | default(item.device) }}
+      Device: {{ item.device }}
+      LUKS name: {{ item.luks_name }}
+      Timestamp: {{ ansible_date_time.iso8601 }}
+    dest: "/tmp/luks-test-{{ item.luks_name }}/.encryption-test/test-file.txt"
+    mode: '0644'
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Read test file from encrypted devices"
+  ansible.builtin.slurp:
+    src: "/tmp/luks-test-{{ item.luks_name }}/.encryption-test/test-file.txt"
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+  register: luks_read_test
+
+- name: "Verify test file content"
+  ansible.builtin.assert:
+    that:
+      - "'LUKS encryption test for ' + (item.description | default(item.device)) in (luks_read_test.results[ansible_loop.index0].content | b64decode)"
+    fail_msg: "Encrypted device {{ item.description | default(item.device) }} read/write test failed"
+    success_msg: "Encrypted device {{ item.description | default(item.device) }} read/write test passed"
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    extended: true
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Clean up test files and directories"
+  ansible.builtin.file:
+    path: "/tmp/luks-test-{{ item.luks_name }}/.encryption-test"
+    state: absent
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Unmount test mounts"
+  ansible.builtin.mount:
+    path: "/tmp/luks-test-{{ item.luks_name }}"
+    state: unmounted
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Remove test mount points"
+  ansible.builtin.file:
+    path: "/tmp/luks-test-{{ item.luks_name }}"
+    state: absent
+  loop: "{{ encrypt_drives }}"
+  loop_control:
+    label: "{{ item.description | default(item.device) }}"
+
+- name: "Display encryption validation summary"
+  ansible.builtin.debug:
+    msg: |
+      LUKS Encryption Validation Complete!
+      
+      Validated:
+      {% for drive in encrypt_drives %}
+      ✅ {{ drive.description | default(drive.device) }}: {{ drive.device }} -> /dev/mapper/{{ drive.luks_name }}
+      {% endfor %}
+      
+      All encrypted drives are:
+      - Properly formatted with LUKS
+      - Accessible with provided keys
+      - Capable of read/write operations
+      - Ready for mounting by the storage role

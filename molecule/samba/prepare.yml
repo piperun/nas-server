@@ -1,0 +1,28 @@
+---
+# Prepare test instance for Ansible execution
+
+- name: Prepare test instance
+  hosts: all
+  gather_facts: false
+  become: true
+  
+  tasks:
+    - name: Install Python3 and dnf dependencies for Ansible
+      raw: |
+        if command -v dnf >/dev/null 2>&1; then
+          dnf install -y python3 python3-libdnf5
+        elif command -v yum >/dev/null 2>&1; then
+          yum install -y python3 python3-dnf
+        elif command -v apt >/dev/null 2>&1; then
+          apt update && apt install -y python3 python3-apt
+        fi
+      changed_when: false
+      
+    - name: Verify Python3 installation
+      command: python3 --version
+      register: python_version
+      changed_when: false
+      
+    - name: Display Python version
+      debug:
+        msg: "Python version: {{ python_version.stdout }}"

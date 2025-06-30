@@ -1,0 +1,155 @@
+---
+# roles/samba-server/tasks/main.yml
+
+- name: "Ensure Quadlet destination directory exists"
+  ansible.builtin.file:
+    path: "{{ samba_quadlet_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: "Generate Samba storage mounts from storage configuration"
+  ansible.builtin.set_fact:
+    samba_storage_mounts: >-
+      [
+      {% for mount in storage_mounts %}
+        {% if mount.samba_share | default(false) %}
+        {
+          "host_path": "{{ mount.mount_point }}",
+          "container_path": "/shares/{{ mount.storage_drive }}"
+        }{% if not loop.last %},{% endif %}
+        {% endif %}
+      {% endfor %}
+      ]
+
+- name: "Generate Samba shares from storage configuration"
+  ansible.builtin.set_fact:
+    samba_shares: >-
+      [
+      {% for mount in storage_mounts %}
+        {% if mount.samba_share | default(false) %}
+        {
+          "name": "{{ mount.storage_drive }}",
+          "path": "/shares/{{ mount.storage_drive }}",
+          "comment": "{{ mount.storage_drive | title }} Storage",
+          "config": {
+            "browseable": "yes",
+            "writable": "yes",
+            "guest ok": "no",
+            "create mask": "0664",
+            "directory mask": "0775",
+            "valid users": "admin"
+          }
+        }{% if not loop.last %},{% endif %}
+        {% endif %}
+      {% endfor %}
+      ]
+
+- name: "Validate generated samba configuration"
+  ansible.builtin.assert:
+    that:
+      - samba_shares | length > 0
+      - samba_storage_mounts | length > 0
+    fail_msg: "No Samba shares configured - ensure storage_mounts have samba_share: true"
+    success_msg: "Samba configuration validated: {{ samba_shares | length }} shares configured"
+
+- name: "Configure firewall for Samba services"
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - "samba"
+    - "samba-client"
+  notify: Restart samba container
+
+- name: "Configure firewall for Avahi/mDNS (if enabled)"
+  ansible.posix.firewalld:
+    service: "mdns"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: not samba_avahi_disable
+  notify: Restart samba container
+
+- name: "Configure firewall for WSDD2 ports (if enabled)"
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - "3702/udp"  # WS-Discovery
+    - "5355/tcp"  # LLMNR
+    - "5355/udp"  # LLMNR
+  when: not samba_wsdd2_disable
+  notify: Restart samba container
+
+- name: "Template the Samba Quadlet unit file"
+  ansible.builtin.template:
+    src: "samba.container.j2"
+    dest: "{{ samba_quadlet_dir }}/{{ samba_container_name }}.container"
+    mode: '0644'
+  register: quadlet_template_result
+
+- name: "Reload systemd daemon to recognize new Quadlet service"
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: quadlet_template_result.changed
+
+- name: "Wait for systemd to process Quadlet file"
+  ansible.builtin.pause:
+    seconds: 3
+  when: quadlet_template_result.changed
+
+- name: "Check if Quadlet service exists"
+  ansible.builtin.command:
+    cmd: systemctl list-unit-files "{{ samba_container_name }}.service"
+  register: service_check
+  failed_when: false
+  changed_when: false
+
+- name: "Debug service check"
+  ansible.builtin.debug:
+    var: service_check
+
+- name: "Enable and start the Samba service"
+  ansible.builtin.systemd:
+    name: "{{ samba_container_name }}.service"
+    enabled: true
+    state: started
+
+- name: "Wait for Samba to start"
+  ansible.builtin.wait_for:
+    port: 445
+    host: "localhost"
+    delay: 10
+    timeout: 60
+
+- name: "Display Samba access information"
+  ansible.builtin.debug:
+    msg: |
+      Samba Server is now running!
+      
+      Network Discovery:
+      {% if not samba_avahi_disable %}
+      - Avahi/Bonjour: {{ samba_avahi_name }}.local
+      {% endif %}
+      {% if not samba_wsdd2_disable %}
+      - Windows Network Discovery: Enabled
+      {% endif %}
+      {% if not samba_netbios_disable %}
+      - NetBIOS: {{ samba_hostname }}
+      {% endif %}
+      
+      SMB Access:
+      - Server: {{ ansible_default_ipv4.address }} or {{ samba_hostname }}
+      - Workgroup: {{ samba_workgroup }}
+      - Protocol: SMB3.11 only (secure)
+      
+      Available Shares:
+      {% for share in samba_shares %}
+      - \\{{ ansible_default_ipv4.address }}\{{ share.name }} ({{ share.comment }})
+      {% endfor %}
+      
+      Users configured: {{ samba_users | map(attribute='username') | join(', ') }}

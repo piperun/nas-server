@@ -1,0 +1,40 @@
+---
+# Example vault configuration for NAS servers
+# Create your own vault.yml file with: ./run-ansible.py --create-vault
+# Edit with: ./run-ansible.py --edit-vault
+
+# Ansible become password (sudo password for remote user)
+vault_become_password: "your_sudo_password_here"
+
+# Samba user credentials (ServerContainers format)
+vault_samba_users:
+  - username: "admin"
+    password: "admin_secure_password_here"
+    uid: "1001"
+    groups: []  # Additional groups beyond default user group
+  - username: "media"
+    password: "media_secure_password_here"
+    uid: "1002"
+    groups: []
+
+# LUKS encryption keyfiles paths
+vault_luks_keyfiles:
+  drive1:
+    source: "luks-keys/drive1.key"
+  drive2:
+    source: "luks-keys/drive2.key"
+
+# VueTorrent qBittorrent credentials
+vault_vuetorrent_username: "admin"
+vault_vuetorrent_password: "secure_torrent_password_here"
+
+# NFS access credentials (if needed)
+vault_nfs_allowed_networks:
+  - "192.168.1.0/24"
+  - "10.0.0.0/8"
+
+# Cockpit admin credentials
+vault_cockpit_admin_password: "secure_cockpit_password_here"
+
+# Optional: Additional secure values
+# vault_additional_secret: "another_secure_value"

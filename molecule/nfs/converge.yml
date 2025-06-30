@@ -1,0 +1,70 @@
+---
+# NFS role-specific converge playbook
+
+- name: Converge - Test NFS Server
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Install required packages
+      package:
+        name:
+          - podman
+          - systemd
+          - firewalld
+          - nfs-utils
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Start firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: true
+      ignore_errors: true
+      
+    - name: Create mock NFS export directories
+      file:
+        path: "{{ item.mount_point }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      
+    - name: Create test content for NFS exports
+      copy:
+        content: |
+          NFS Export Test Content
+          ======================
+          Export: {{ item.name }}
+          Mount Point: {{ item.mount_point }}
+          Device: {{ item.device }}
+          
+          This directory is exported via NFS for testing.
+          Created by Molecule test suite.
+        dest: "{{ item.mount_point }}/nfs-export-info.txt"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0644"
+      loop: "{{ storage_drives }}"
+      when: item.nfs_export | default(false)
+      
+    - name: Create sample data directories
+      file:
+        path: "{{ drive.mount_point }}/{{ subdir }}"
+        state: directory
+        owner: "{{ drive.owner }}"
+        group: "{{ drive.group }}"
+        mode: "0755"
+      loop: "{{ storage_drives | selectattr('nfs_export', 'equalto', true) | product(['documents', 'media', 'backups']) | list }}"
+      loop_control:
+        loop_var: item
+      vars:
+        drive: "{{ item[0] }}"
+        subdir: "{{ item[1] }}"
+  
+  roles:
+    - role: nfs-server

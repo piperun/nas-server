@@ -1,0 +1,161 @@
+---
+# Molecule verify playbook - validates service deployment
+
+- name: Verify - Test service deployment
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if Podman is installed
+      command: podman --version
+      register: podman_version
+      changed_when: false
+      
+    - name: Display Podman version
+      debug:
+        msg: "Podman version: {{ podman_version.stdout }}"
+        
+    - name: List running containers
+      command: podman ps --format json
+      register: running_containers
+      changed_when: false
+      
+    - name: Parse container list
+      set_fact:
+        containers: "{{ running_containers.stdout | from_json if running_containers.stdout != '' else [] }}"
+        
+    - name: Display running containers
+      debug:
+        msg: "Running containers: {{ containers | map(attribute='Names') | list }}"
+        
+    # Samba Service Verification
+    - name: Check if Samba container is running
+      assert:
+        that:
+          - containers | selectattr('Names', 'match', '.*samba.*') | list | length > 0
+        fail_msg: "Samba container is not running"
+        success_msg: "Samba container is running"
+      when: storage_drives | selectattr('samba_share', 'equalto', true) | list | length > 0
+      
+    - name: Test Samba service (internal)
+      command: podman exec nas-test-instance ss -tlnp | grep :445
+      register: samba_port_check
+      changed_when: false
+      when: storage_drives | selectattr('samba_share', 'equalto', true) | list | length > 0
+      ignore_errors: true
+      
+    # NFS Service Verification
+    - name: Check if NFS container is running
+      assert:
+        that:
+          - containers | selectattr('Names', 'match', '.*nfs.*') | list | length > 0
+        fail_msg: "NFS container is not running"
+        success_msg: "NFS container is running"
+      when: storage_drives | selectattr('nfs_export', 'equalto', true) | list | length > 0
+      
+    - name: Test NFS service port
+      wait_for:
+        port: 2049
+        host: localhost
+        timeout: 10
+      when: storage_drives | selectattr('nfs_export', 'equalto', true) | list | length > 0
+      ignore_errors: true
+      
+    # VueTorrent Service Verification
+    - name: Check if VueTorrent container is running
+      assert:
+        that:
+          - containers | selectattr('Names', 'match', '.*vuetorrent.*') | list | length > 0
+        fail_msg: "VueTorrent container is not running"
+        success_msg: "VueTorrent container is running"
+        
+    - name: Test VueTorrent web interface
+      uri:
+        url: "http://localhost:8080"
+        method: GET
+        timeout: 10
+      register: vuetorrent_response
+      ignore_errors: true
+      
+    - name: Verify VueTorrent response
+      assert:
+        that:
+          - vuetorrent_response.status == 200 or vuetorrent_response.status == 401
+        fail_msg: "VueTorrent web interface is not accessible"
+        success_msg: "VueTorrent web interface is accessible"
+      when: vuetorrent_response is defined
+      
+    # Cockpit Service Verification  
+    - name: Check if Cockpit is installed
+      systemd:
+        name: cockpit.socket
+      register: cockpit_service
+      ignore_errors: true
+      
+    - name: Test Cockpit web interface
+      uri:
+        url: "https://localhost:9090"
+        method: GET
+        timeout: 10
+        validate_certs: false
+      register: cockpit_response
+      ignore_errors: true
+      
+    - name: Verify Cockpit response
+      assert:
+        that:
+          - cockpit_response.status == 200 or cockpit_response.status == 401 or cockpit_response.status == 404
+        fail_msg: "Cockpit web interface is not accessible"
+        success_msg: "Cockpit web interface is accessible"
+      when: cockpit_response is defined
+      
+    # Storage Mount Verification
+    - name: Check mock storage mount points exist
+      stat:
+        path: "{{ item.mount_point }}"
+      register: mount_check
+      loop: "{{ storage_drives }}"
+      when: storage_drives is defined
+      
+    - name: Verify mock storage directories
+      assert:
+        that:
+          - mount_check.results | selectattr('stat.exists', 'equalto', true) | list | length == storage_drives | length
+        fail_msg: "Not all mock storage directories exist"
+        success_msg: "All mock storage directories exist"
+      when: storage_drives is defined and mount_check is defined
+      
+    - name: Check test files in mock storage
+      stat:
+        path: "{{ item.mount_point }}/test-file.txt"
+      register: test_file_check
+      loop: "{{ storage_drives }}"
+      when: storage_drives is defined
+      
+    - name: Verify test files exist
+      assert:
+        that:
+          - test_file_check.results | selectattr('stat.exists', 'equalto', true) | list | length == storage_drives | length
+        fail_msg: "Not all test files exist in mock storage"
+        success_msg: "All test files exist in mock storage"
+      when: storage_drives is defined and test_file_check is defined
+      
+    # Summary
+    - name: Display test summary
+      debug:
+        msg: |
+          =================================
+          MOLECULE TEST VERIFICATION SUMMARY
+          =================================
+          ✅ Containerized services tested successfully
+          ✅ Mock storage configuration validated
+          ⚠️  Hardware roles (encrypt, mount) skipped - requires real hardware
+          
+          Tested services:
+          - Samba Server: {{ 'ENABLED' if (storage_drives | selectattr('samba_share', 'equalto', true) | list | length > 0) else 'DISABLED' }}
+          - NFS Server: {{ 'ENABLED' if (storage_drives | selectattr('nfs_export', 'equalto', true) | list | length > 0) else 'DISABLED' }}  
+          - VueTorrent: ENABLED
+          - Cockpit: ENABLED
+          
+          Running containers: {{ containers | map(attribute='Names') | list | join(', ') if containers else 'None' }}

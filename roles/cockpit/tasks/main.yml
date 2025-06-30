@@ -1,110 +1,79 @@
 ---
-- name: Check if Cockpit is already running
-  systemd:
-    name: cockpit.socket
-  register: cockpit_status
+# roles/cockpit/tasks/main.yml
+
+- name: "Check if SSH password authentication is already enabled"
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config.d/02-enable-passwords.conf
+    line: "PasswordAuthentication yes"
+    state: absent
+  check_mode: true
+  register: ssh_password_check
   failed_when: false
 
-- name: Skip Cockpit setup if already running
-  debug:
-    msg: "Cockpit is already active, skipping installation and configuration"
-  when: cockpit_status.status is defined and cockpit_status.status.ActiveState == "active"
+- name: "Check main sshd_config for password authentication"
+  ansible.builtin.command:
+    cmd: grep -E "^PasswordAuthentication\s+(yes|no)" /etc/ssh/sshd_config
+  register: main_sshd_config_check
+  failed_when: false
+  changed_when: false
 
-- name: Install and configure Cockpit
-  block:
-    - name: Check currently installed packages
-      command: rpm-ostree status --json
-      register: ostree_status
-      changed_when: false
+- name: "Enable SSH password authentication if not already enabled"
+  ansible.builtin.copy:
+    content: "PasswordAuthentication yes\n"
+    dest: /etc/ssh/sshd_config.d/02-enable-passwords.conf
+    mode: '0644'
+  when: 
+    - ssh_password_check.found == 0
+    - "'PasswordAuthentication yes' not in main_sshd_config_check.stdout"
+  notify: Restart sshd
 
-    - name: Parse installed packages
-      set_fact:
-        installed_packages: "{{ (ostree_status.stdout | from_json)['deployments'][0]['requested-packages'] | default([]) }}"
+- name: "Install Cockpit packages as overlay RPMs"
+  community.general.rpm_ostree_pkg:
+    name:
+      - cockpit-system
+      - cockpit-ostree
+      - cockpit-podman
+      - cockpit-networkmanager
+    state: present
+  notify: Reboot to apply OS changes
 
-    - name: Determine packages to install
-      set_fact:
-        packages_to_install: "{{ cockpit_packages | difference(installed_packages) }}"
-
-    - name: Install Cockpit packages as overlay RPMs
-      command: rpm-ostree install {{ packages_to_install | join(' ') }}
-      when: packages_to_install | length > 0
-      notify:
-        - reboot system
-
-    - name: Enable Cockpit socket
-      systemd:
-        name: cockpit.socket
-        enabled: yes
-        state: started
-
-    - name: Configure firewall for Cockpit
-      firewalld:
-        service: cockpit
-        permanent: yes
-        state: enabled
-        immediate: yes
-  when: cockpit_status.status is not defined or cockpit_status.status.ActiveState != "active"
-
-- name: Flush handlers to ensure reboot happens before continuing
+- name: "Flush handlers to reboot if needed"
   meta: flush_handlers
 
-- name: Wait for system to come back online after reboot
-  wait_for_connection:
-    delay: 30
-    timeout: "{{ reboot_timeout }}"
-
-- name: Ensure SSH config directory exists
-  file:
-    path: "{{ ssh_config_dir }}"
-    state: directory
-    mode: '0755'
-
-- name: Enable password-based SSH authentication
-  copy:
-    content: "PasswordAuthentication yes\n"
-    dest: "{{ ssh_config_dir }}/{{ ssh_config_file }}"
-    mode: '0644'
-  notify: restart sshd
-  when: enable_password_auth | bool
-
-- name: Enable Cockpit socket
-  systemd:
-    name: cockpit.socket
-    enabled: yes
-    state: started
-
-- name: Configure firewall for Cockpit
-  firewalld:
-    service: cockpit
-    permanent: yes
-    state: enabled
-    immediate: yes
-
-- name: Run Cockpit web service container (RUN label)
-  command: podman container runlabel --name {{ cockpit_container_name }} RUN {{ cockpit_container_image }}
+- name: "Run Cockpit web service container"
+  ansible.builtin.command:
+    cmd: podman container runlabel --name cockpit-ws RUN quay.io/cockpit/ws
   register: cockpit_run_result
+  failed_when: false
   changed_when: cockpit_run_result.rc == 0
-  failed_when: 
-    - cockpit_run_result.rc != 0
-    - "'already exists' not in cockpit_run_result.stderr"
 
-- name: Make Cockpit start on boot (INSTALL label)
-  command: podman container runlabel INSTALL {{ cockpit_container_image }}
+- name: "Install Cockpit systemd service"
+  ansible.builtin.command:
+    cmd: podman container runlabel INSTALL quay.io/cockpit/ws
   register: cockpit_install_result
+  failed_when: false
   changed_when: cockpit_install_result.rc == 0
 
-- name: Enable cockpit service
-  systemd:
+- name: "Enable and start Cockpit service"
+  ansible.builtin.systemd:
     name: "{{ cockpit_service_name }}"
-    enabled: yes
-    daemon_reload: yes
+    state: started
+    enabled: true
 
-- name: Verify Cockpit is accessible
-  uri:
-    url: "http://localhost:9090"
-    method: GET
-    status_code: [200, 401]  # 401 is expected for login page
-  register: cockpit_check
-  retries: 5
-  delay: 10
-  until: cockpit_check is succeeded
+- name: "Configure firewall for Cockpit"
+  ansible.posix.firewalld:
+    service: "{{ cockpit_firewall_service }}"
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: "Display Cockpit access information"
+  ansible.builtin.debug:
+    msg: |
+      Cockpit Web Interface is available at:
+      https://{{ ansible_default_ipv4.address }}:{{ cockpit_port }}
+      
+      Use your system user credentials to log in.
+      
+      Note: First-time access may show a security warning
+      due to self-signed certificates. This is normal.

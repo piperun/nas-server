@@ -1,0 +1,67 @@
+---
+# Storage Configuration
+# This file defines all storage drives and their mounting configuration
+# All storage-related roles reference this file
+#
+# To discover available drives on target host:
+# ansible-playbook discover-storage.yml -l target-host
+# Then review discovered_storage_template.yml and import sections below
+
+# Storage drives definition
+storage_drives:
+  # Media storage drive
+  - name: "media"
+    description: "Primary media storage"
+    device: "/dev/sda1"
+    # If format is not defined or is false we skip formatting
+    format: true
+    # If fstype is not defined (i.e. format is false) then we skip formatting
+    fstype: "btrfs"
+    
+  # Downloads storage drive  
+  - name: "downloads"
+    description: "Downloads and torrents"
+    device: "/dev/sdb1"
+    format: true
+    fstype: "btrfs"
+
+  # Example unformatted drive (existing filesystem)
+  # - name: "backup"
+  #   description: "Backup storage"
+  #   device: "/dev/sdc1"
+  #   format: false
+  #   # fstype not needed when format: false
+
+# Mount configurations
+mounts:
+  # Media drive mount
+  - storage_drive: "media"        # References storage_drives name above
+    mount_point: "/var/mnt/media"
+    mount_options: "defaults,noatime,nodev,nosuid"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+    # Service integration
+    nfs_export: false
+    samba_share: true
+    
+  # Downloads drive mount
+  - storage_drive: "downloads"    # References storage_drives name above
+    mount_point: "/var/mnt/downloads"
+    mount_options: "defaults,noatime,nodev,nosuid"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+    # Service integration
+    nfs_export: false
+    samba_share: true
+
+  # Example additional mount for same drive (e.g., subvolume)
+  # - storage_drive: "media"
+  #   mount_point: "/var/mnt/media-backup"
+  #   mount_options: "defaults,noatime,subvol=backup"
+  #   owner: "root" 
+  #   group: "root"
+  #   mode: "0755"
+  #   nfs_export: false
+  #   samba_share: false

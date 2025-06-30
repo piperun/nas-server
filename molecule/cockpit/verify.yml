@@ -1,0 +1,169 @@
+---
+# Cockpit-specific verification
+
+- name: Verify - Cockpit Web Console functionality
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check if Cockpit is installed
+      package:
+        name: cockpit
+        state: present
+      register: cockpit_package
+      check_mode: true
+      
+    - name: Verify Cockpit package is installed
+      assert:
+        that:
+          - not cockpit_package.changed
+        fail_msg: "Cockpit package is not installed"
+        success_msg: "Cockpit package is installed"
+        
+    - name: Check Cockpit socket service
+      systemd:
+        name: cockpit.socket
+      register: cockpit_socket
+      
+    - name: Verify Cockpit socket is enabled and active
+      assert:
+        that:
+          - cockpit_socket.status.LoadState == "loaded"
+          - cockpit_socket.status.ActiveState == "active"
+        fail_msg: "Cockpit socket is not active"
+        success_msg: "Cockpit socket is active"
+      when: cockpit_socket.status is defined
+      
+    - name: Test Cockpit port 9090
+      wait_for:
+        port: 9090
+        host: localhost
+        timeout: 30
+        msg: "Cockpit port 9090 is not accessible"
+        
+    - name: Test Cockpit WebUI HTTP response
+      uri:
+        url: "https://localhost:9090"
+        method: GET
+        timeout: 15
+        validate_certs: false
+        status_code: [200, 401, 403, 404]
+      register: cockpit_response
+      retries: 3
+      delay: 5
+      
+    - name: Verify Cockpit WebUI is accessible
+      assert:
+        that:
+          - cockpit_response.status in [200, 401, 403, 404]
+        fail_msg: "Cockpit WebUI is not responding properly"
+        success_msg: "Cockpit WebUI is accessible (status: {{ cockpit_response.status }})"
+      when: cockpit_response is defined
+      
+    - name: Check Cockpit configuration files
+      stat:
+        path: "{{ item }}"
+      register: config_files
+      loop:
+        - "/etc/cockpit/cockpit.conf"
+        - "/etc/systemd/system/cockpit.socket.d"
+      ignore_errors: true
+      
+    - name: Display config file status
+      debug:
+        msg: "Config file {{ item.item }}: {{ 'EXISTS' if item.stat.exists else 'MISSING' }}"
+      loop: "{{ config_files.results }}"
+      when: config_files is defined
+      
+    - name: Check firewall rules for Cockpit
+      command: firewall-cmd --list-services
+      register: firewall_services
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Verify Cockpit firewall rule
+      assert:
+        that:
+          - "'cockpit' in firewall_services.stdout"
+        fail_msg: "Cockpit firewall rule not configured"
+        success_msg: "Cockpit firewall rule is configured"
+      when: firewall_services is succeeded
+      
+    - name: Check available Cockpit applications
+      command: ls -la /usr/share/cockpit/
+      register: cockpit_apps
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display available Cockpit applications
+      debug:
+        msg: "Cockpit applications: {{ cockpit_apps.stdout_lines }}"
+      when: cockpit_apps is succeeded
+      
+    - name: Test Cockpit login page (if accessible)
+      uri:
+        url: "https://localhost:9090/login"
+        method: GET
+        timeout: 10
+        validate_certs: false
+      register: login_page
+      ignore_errors: true
+      
+    - name: Verify login page accessibility
+      debug:
+        msg: "Login page status: {{ login_page.status if login_page is succeeded else 'Not accessible' }}"
+      when: login_page is defined
+      
+    - name: Check system user accounts for Cockpit access
+      command: getent passwd
+      register: system_users
+      changed_when: false
+      
+    - name: Verify admin user can access Cockpit
+      assert:
+        that:
+          - "'root:' in system_users.stdout"
+        fail_msg: "No admin users available for Cockpit"
+        success_msg: "Admin users available for Cockpit access"
+      when: system_users is defined
+      
+    - name: Check Cockpit service status
+      systemd:
+        name: cockpit
+      register: cockpit_service
+      ignore_errors: true
+      
+    - name: Display Cockpit service status
+      debug:
+        msg: "Cockpit service: {{ cockpit_service.status.ActiveState if cockpit_service.status is defined else 'Service not found' }}"
+      when: cockpit_service is defined
+      
+    - name: Check for any Cockpit error logs
+      command: journalctl -u cockpit.socket --no-pager -n 10
+      register: cockpit_logs
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display recent Cockpit logs
+      debug:
+        msg: "Recent Cockpit logs: {{ cockpit_logs.stdout_lines[-5:] if cockpit_logs.stdout_lines else 'No logs' }}"
+      when: cockpit_logs is defined
+      
+    - name: Display test summary
+      debug:
+        msg: |
+          =============================
+          COCKPIT MOLECULE TEST SUMMARY
+          =============================
+          ✅ Cockpit package: INSTALLED
+          ✅ Socket service: {{ cockpit_socket.status.ActiveState if cockpit_socket.status is defined else 'UNKNOWN' }}
+          ✅ Port 9090: ACCESSIBLE
+          ✅ WebUI: ACCESSIBLE ({{ cockpit_response.status if cockpit_response is defined else 'UNKNOWN' }})
+          ✅ Firewall: {{ 'CONFIGURED' if (firewall_services is succeeded and 'cockpit' in firewall_services.stdout) else 'CHECK MANUALLY' }}
+          
+          Cockpit Web Console is ready!
+          URL: https://localhost:9090
+          Login: Use system user accounts
+          
+          Test completed successfully!
