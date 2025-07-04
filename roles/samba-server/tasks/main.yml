@@ -52,15 +52,34 @@
     fail_msg: "No Samba shares configured - ensure storage_mounts have samba_share: true"
     success_msg: "Samba configuration validated: {{ samba_shares | length }} shares configured"
 
-- name: "Configure firewall for Samba services"
+- name: Check if Samba firewall service is already enabled
+  ansible.builtin.command: firewall-cmd --query-service=samba
+  register: samba_firewall_service
+  changed_when: false
+  failed_when: false
+
+- name: Configure firewall for Samba services
   ansible.posix.firewalld:
-    service: "{{ item }}"
+    service: "samba"
     permanent: true
     state: enabled
     immediate: true
-  loop:
-    - "samba"
-    - "samba-client"
+  when: not samba_firewall_service.stdout | bool
+  notify: Restart samba container
+
+- name: Check if Samba-client firewall service is already enabled
+  ansible.builtin.command: firewall-cmd --query-service=samba-client
+  register: samba_client_firewall_service
+  changed_when: false
+  failed_when: false
+
+- name: Configure firewall for Samba-client services
+  ansible.posix.firewalld:
+    service: "samba-client"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: not samba_client_firewall_service.stdout | bool
   notify: Restart samba container
 
 - name: "Configure firewall for Avahi/mDNS (if enabled)"

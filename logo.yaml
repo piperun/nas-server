@@ -1,0 +1,23 @@
+---
+# Cockpit Branding Assets
+# Place your branding files in the 'files/' directory at the project root.
+# Reference these in your playbook or inventory as variables:
+#   cockpit_logo: files/mylogo.png
+#   cockpit_favicon: files/myfavicon.ico
+#   cockpit_apple_touch_icon: files/myappleicon.png
+#   cockpit_background: files/mybackground.jpg
+#   cockpit_css: files/mycustom.css  # Optional custom CSS
+
+# Example:
+cockpit_logo: files/mylogo.png
+cockpit_favicon: files/myfavicon.ico
+cockpit_apple_touch_icon: files/myappleicon.png
+cockpit_background: files/mybackground.jpg
+cockpit_css: files/mycustom.css  # Optional
+
+description: |
+  - Place your custom logo, favicon, apple-touch-icon, background image, and (optionally) CSS file in the 'files/' directory.
+  - Reference them in your inventory or playbook as shown above.
+  - Supported formats: PNG (logo, apple-touch-icon, background), ICO (favicon), CSS (custom styles).
+  - The role will copy these to the correct Cockpit branding directory on the target system.
+  - The CSS file is optional and can be used to further customize the Cockpit login page and UI. 

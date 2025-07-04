@@ -77,3 +77,48 @@
       
       Note: First-time access may show a security warning
       due to self-signed certificates. This is normal.
+
+- name: Set Cockpit branding directory fact
+  set_fact:
+    cockpit_branding_dir: "/usr/share/cockpit/branding/{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}"
+
+- name: Ensure Cockpit branding directory exists
+  ansible.builtin.file:
+    path: "{{ cockpit_branding_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Copy custom logo if defined
+  ansible.builtin.copy:
+    src: "{{ cockpit_logo | default(omit) }}"
+    dest: "{{ cockpit_branding_dir }}/logo.png"
+    mode: '0644'
+  when: cockpit_logo is defined
+
+- name: Copy custom favicon if defined
+  ansible.builtin.copy:
+    src: "{{ cockpit_favicon | default(omit) }}"
+    dest: "{{ cockpit_branding_dir }}/favicon.ico"
+    mode: '0644'
+  when: cockpit_favicon is defined
+
+- name: Copy custom apple-touch-icon if defined
+  ansible.builtin.copy:
+    src: "{{ cockpit_apple_touch_icon | default(omit) }}"
+    dest: "{{ cockpit_branding_dir }}/apple-touch-icon.png"
+    mode: '0644'
+  when: cockpit_apple_touch_icon is defined
+
+- name: Copy custom background if defined
+  ansible.builtin.copy:
+    src: "{{ cockpit_background | default(omit) }}"
+    dest: "{{ cockpit_branding_dir }}/background.jpg"
+    mode: '0644'
+  when: cockpit_background is defined
+
+- name: Copy custom CSS if defined
+  ansible.builtin.copy:
+    src: "{{ cockpit_css | default(omit) }}"
+    dest: "{{ cockpit_branding_dir }}/branding.css"
+    mode: '0644'
+  when: cockpit_css is defined

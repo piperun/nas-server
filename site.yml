@@ -23,7 +23,7 @@
 
     #- role: nfs-server
 
-    - role: samba-server
+    #- role: samba-server
     - role: vuetorrent
     #- role: cockpit
 
