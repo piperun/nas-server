@@ -25,7 +25,7 @@
 
     - role: samba-server
     - role: vuetorrent
-    - role: cockpit
+    #- role: cockpit
 
   post_tasks:
     - name: Display access information

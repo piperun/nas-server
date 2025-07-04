@@ -323,6 +323,20 @@ vault_samba_users:
             print("\n⏹️  Execution interrupted by user")
             return False
     
+    def create_role(self, role_name, flags=None):
+        """Create a new Ansible role using ansible-galaxy"""
+        cmd = ["ansible-galaxy", "init", role_name]
+        if flags:
+            cmd.extend(flags)
+        print(f"🚀 Creating new role: {role_name} {' '.join(flags) if flags else ''}")
+        try:
+            result = subprocess.run(cmd, check=True)
+            print(f"✅ Role '{role_name}' created successfully!")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to create role: {e}")
+            return False
+    
     def main(self):
         parser = argparse.ArgumentParser(
             description="Simplified Ansible runner for NAS server deployment",
@@ -416,6 +430,17 @@ Examples:
             help="Molecule test scenario to run (default: default)"
         )
         
+        subparsers = parser.add_subparsers(dest="subcommand")
+
+        # Create subparser for 'create' command
+        create_parser = subparsers.add_parser("create", help="Create resources (roles, etc.)")
+        create_subparsers = create_parser.add_subparsers(dest="create_what")
+
+        # 'create role' subcommand
+        create_role_parser = create_subparsers.add_parser("role", help="Create a new Ansible role using ansible-galaxy")
+        create_role_parser.add_argument("name", metavar="ROLE_NAME", help="Name of the role to create")
+        create_role_parser.add_argument("flags", nargs=argparse.REMAINDER, help="Additional flags for ansible-galaxy init")
+        
         args = parser.parse_args()
         
         print("🏠 NAS Server Ansible Runner")
@@ -460,6 +485,13 @@ Examples:
         except Exception as e:
             print(f"❌ Error setting up vault password: {e}")
             sys.exit(1)
+            
+        # Handle 'create role' subcommand
+        if args.subcommand == "create" and args.create_what == "role":
+            role_name = args.name
+            flags = args.flags if args.flags else []
+            success = self.create_role(role_name, flags)
+            sys.exit(0 if success else 1)
             
         # Run ansible command
         success = self.run_ansible_command(args)

@@ -43,10 +43,18 @@ Environment=WSDD2_PARAMETERS={{ samba_wsdd2_parameters }}
 Environment=NETBIOS_DISABLE=1
 {% endif %}
 
-# Global Samba configuration
+# Global Samba configuration (all other options as stanza)
+{% set stanza_lines = [] %}
 {% for key, value in samba_global_config.items() %}
-Environment=SAMBA_GLOBAL_CONFIG_{{ key | replace(' ', '_') | replace(':', '_') | upper }}={{ value }}
+  {% if key not in [
+    'workgroup', 'server string', 'log level', 'server role', 'map to guest'
+  ] %}
+    {% set _ = stanza_lines.append(key ~ ' = ' ~ value) %}
+  {% endif %}
 {% endfor %}
+{% if stanza_lines %}
+Environment='SAMBA_GLOBAL_STANZA={{ stanza_lines | join(";") | replace("'", "'\\''") }}'
+{% endif %}
 
 # User accounts
 {% for user in samba_users %}
@@ -60,8 +68,14 @@ Environment=GROUPS_{{ user.username }}={{ user.groups | join(',') }}
 {% endfor %}
 
 # Samba volume configurations
+{%- macro render_share_config(share) -%}
+[{{ share.name|capitalize }}];
+{%- for key, value in share.config.items() %} {{ key }} = {{ value }};
+{%- endfor %} path = {{ share.path }}; comment = {{ share.comment }}
+{%- endmacro %}
+
 {% for share in samba_shares %}
-Environment=SAMBA_VOLUME_CONFIG_{{ share.name }}={% for key, value in share.config.items() %}{{ key }}={{ value }};{% endfor %}path={{ share.path }};comment={{ share.comment }}
+Environment=SAMBA_VOLUME_CONFIG_{{ share.name }}="{{ render_share_config(share) }}"
 {% endfor %}
 
 # Volume mounts

@@ -108,6 +108,20 @@
         success_msg: "Samba user accounts configured correctly"
       when: container_env is succeeded
       
+    - name: Test Samba authentication for testuser
+      command: podman exec samba-server smbclient -L localhost -U testuser%testpass123
+      register: smbclient_test
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Assert Samba authentication works
+      assert:
+        that:
+          - "'Sharename' in smbclient_test.stdout"
+        fail_msg: "Samba authentication for testuser failed"
+        success_msg: "Samba authentication for testuser succeeded"
+      when: smbclient_test is defined
+      
     - name: Display test summary
       debug:
         msg: |

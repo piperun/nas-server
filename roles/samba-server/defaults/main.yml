@@ -28,7 +28,7 @@ samba_netbios_disable: false
 # Global Samba configuration
 samba_log_level: "1"
 samba_server_role: "standalone server"
-samba_map_to_guest: "Bad User"
+samba_map_to_guest: "Never"
 samba_timezone: "Etc/UTC"
 
 # Security and performance settings
@@ -43,7 +43,7 @@ samba_global_config:
   "smb encrypt": "desired"
   
   # Performance
-  "socket options": "TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=524288 SO_SNDBUF=524288"
+  "socket options": "TCP_NODELAY IPTOS_LOWDELAY"
   "deadtime": "15"
   "getwd cache": "yes"
   "use sendfile": "yes"
