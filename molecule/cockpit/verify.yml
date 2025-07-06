@@ -150,6 +150,67 @@
         msg: "Recent Cockpit logs: {{ cockpit_logs.stdout_lines[-5:] if cockpit_logs.stdout_lines else 'No logs' }}"
       when: cockpit_logs is defined
       
+    # Branding Verification
+    - name: Check Cockpit branding directory
+      stat:
+        path: "/var/lib/cockpit/branding"
+      register: branding_dir
+      
+    - name: Verify branding directory exists
+      assert:
+        that:
+          - branding_dir.stat.exists
+        fail_msg: "Cockpit branding directory does not exist"
+        success_msg: "Cockpit branding directory exists"
+      when: branding_dir is defined
+      
+    - name: Check branding subdirectory
+      command: ls -la /var/lib/cockpit/branding/
+      register: branding_subdirs
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display branding subdirectories
+      debug:
+        msg: "Branding subdirectories: {{ branding_subdirs.stdout_lines }}"
+      when: branding_subdirs is succeeded
+      
+    - name: Check for copied branding files
+      stat:
+        path: "{{ item }}"
+      register: branding_files
+      loop:
+        - "/var/lib/cockpit/branding/fedora/background-0.png"
+        - "/var/lib/cockpit/branding/fedora/test-branding.css"
+        - "/var/lib/cockpit/branding/fedora/test-logo.png"
+        - "/var/lib/cockpit/branding/fedora/test-favicon.ico"
+      ignore_errors: true
+      
+    - name: Verify branding files were copied
+      assert:
+        that:
+          - branding_files.results | selectattr('stat.exists', 'equalto', true) | list | length >= 2
+        fail_msg: "Branding files were not copied correctly"
+        success_msg: "Branding files were copied successfully"
+      when: branding_files is defined
+      
+    - name: Display branding file status
+      debug:
+        msg: "Branding file {{ item.item }}: {{ 'EXISTS' if item.stat.exists else 'MISSING' }}"
+      loop: "{{ branding_files.results }}"
+      when: branding_files is defined
+      
+    - name: Check branding file permissions
+      command: ls -la /var/lib/cockpit/branding/fedora/
+      register: branding_perms
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Display branding file permissions
+      debug:
+        msg: "Branding file permissions: {{ branding_perms.stdout_lines }}"
+      when: branding_perms is succeeded
+      
     - name: Display test summary
       debug:
         msg: |
@@ -161,9 +222,12 @@
           ✅ Port 9090: ACCESSIBLE
           ✅ WebUI: ACCESSIBLE ({{ cockpit_response.status if cockpit_response is defined else 'UNKNOWN' }})
           ✅ Firewall: {{ 'CONFIGURED' if (firewall_services is succeeded and 'cockpit' in firewall_services.stdout) else 'CHECK MANUALLY' }}
+          ✅ Branding: {{ 'CONFIGURED' if (branding_files is defined and branding_files.results | selectattr('stat.exists', 'equalto', true) | list | length >= 2) else 'NOT CONFIGURED' }}
           
           Cockpit Web Console is ready!
           URL: https://localhost:9090
           Login: Use system user accounts
+          
+          Branding files: {{ branding_files.results | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | list | join(', ') if branding_files is defined else 'None' }}
           
           Test completed successfully!

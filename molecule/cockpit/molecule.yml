@@ -28,6 +28,15 @@ provisioner:
         # Mock vault variables for Cockpit
         vault_cockpit_admin_password: "cockpit123test"
         cockpit_admin_password: "{{ vault_cockpit_admin_password }}"
+        
+        # Test branding configuration
+        cockpit_backgrounds:
+          - "files/test-background.png"
+        cockpit_css_files:
+          - "files/test-branding.css"
+        cockpit_logo: "files/test-logo.png"
+        cockpit_favicon: "files/test-favicon.ico"
+        cockpit_apple_touch_icon: ""  # Not testing this
 
 verifier:
   name: ansible
