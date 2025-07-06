@@ -157,3 +157,8 @@
     name: cockpit.service
     state: started
   notify: reload systemd 
+
+- name: Restart Cockpit with new theme
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: restarted
