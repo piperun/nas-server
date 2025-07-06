@@ -59,12 +59,19 @@
   command: restorecon -R "{{ nfs_export_path }}"
   when: selinux_context_result is changed
 
+- name: Check if NFS firewall service is already enabled
+  ansible.builtin.command: firewall-cmd --query-service={{ nfs_firewall_service }}
+  register: nfs_firewall_service
+  changed_when: false
+  failed_when: false
+
 - name: Enable NFS service in firewall
   firewalld:
     service: "{{ nfs_firewall_service }}"
     permanent: yes
     state: enabled
     immediate: yes
+  when: not nfs_firewall_service.stdout | bool
 
 - name: Create systemd containers directory
   file:

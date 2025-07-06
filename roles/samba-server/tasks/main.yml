@@ -82,26 +82,72 @@
   when: not samba_client_firewall_service.stdout | bool
   notify: Restart samba container
 
+- name: "Check if Avahi/mDNS firewall service is already enabled"
+  ansible.builtin.command: firewall-cmd --query-service=mdns
+  register: samba_avahi_firewall_service
+  changed_when: false
+  failed_when: false
+
 - name: "Configure firewall for Avahi/mDNS (if enabled)"
   ansible.posix.firewalld:
     service: "mdns"
     permanent: true
     state: enabled
     immediate: true
-  when: not samba_avahi_disable
+  when: 
+    - not samba_avahi_disable
+    - not samba_avahi_firewall_service.stdout | bool
   notify: Restart samba container
 
-- name: "Configure firewall for WSDD2 ports (if enabled)"
+- name: "Check if WSDD2 WS-Discovery port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port=3702/udp
+  register: samba_wsdd2_3702_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Check if WSDD2 LLMNR TCP port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port=5355/tcp
+  register: samba_wsdd2_5355_tcp_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Check if WSDD2 LLMNR UDP port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port=5355/udp
+  register: samba_wsdd2_5355_udp_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Configure firewall for WSDD2 WS-Discovery port (if enabled)"
   ansible.posix.firewalld:
-    port: "{{ item }}"
+    port: "3702/udp"
     permanent: true
     state: enabled
     immediate: true
-  loop:
-    - "3702/udp"  # WS-Discovery
-    - "5355/tcp"  # LLMNR
-    - "5355/udp"  # LLMNR
-  when: not samba_wsdd2_disable
+  when: 
+    - not samba_wsdd2_disable
+    - not samba_wsdd2_3702_firewall.stdout | bool
+  notify: Restart samba container
+
+- name: "Configure firewall for WSDD2 LLMNR TCP port (if enabled)"
+  ansible.posix.firewalld:
+    port: "5355/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: 
+    - not samba_wsdd2_disable
+    - not samba_wsdd2_5355_tcp_firewall.stdout | bool
+  notify: Restart samba container
+
+- name: "Configure firewall for WSDD2 LLMNR UDP port (if enabled)"
+  ansible.posix.firewalld:
+    port: "5355/udp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: 
+    - not samba_wsdd2_disable
+    - not samba_wsdd2_5355_udp_firewall.stdout | bool
   notify: Restart samba container
 
 - name: "Template the Samba Quadlet unit file"
