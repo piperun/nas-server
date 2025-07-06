@@ -48,21 +48,47 @@ class AnsibleRunner:
     
     def get_vault_template(self):
         """Generate vault file template with secure defaults"""
-        template = """---
+        # Generate secure passwords for services
+        samba_admin_pass = self.generate_vault_password(16)
+        samba_user_pass = self.generate_vault_password(16)
+        vuetorrent_pass = self.generate_vault_password(16)
+        
+        template = f"""---
 # Encrypted variables for NAS server deployment
 # Edit this file with: ansible-vault edit group_vars/nas_servers/vault.yml
 
 # Ansible become password (sudo password for remote user)
 vault_become_password: "your_sudo_password_here"
 
-# Samba user credentials
+# Samba user credentials (ServerContainers format)
 vault_samba_users:
   - username: "admin"
-    password: "admin_secure_password_here"
+    password: "{samba_admin_pass}"
     uid: "1001"
+    groups: []
   - username: "user"
-    password: "user_secure_password_here"
+    password: "{samba_user_pass}"
     uid: "1002"
+    groups: []
+
+# VueTorrent qBittorrent credentials
+vault_vuetorrent_username: "admin"
+vault_vuetorrent_password: "{vuetorrent_pass}"
+
+# NFS access credentials (if needed)
+vault_nfs_allowed_networks:
+  - "192.168.1.0/24"
+  - "10.0.0.0/8"
+
+# Cockpit admin credentials
+vault_cockpit_admin_password: "secure_cockpit_password_here"
+
+# LUKS encryption keyfiles paths (add as needed)
+vault_luks_keyfiles:
+  drive1:
+    source: "luks-keys/drive1.key"
+  drive2:
+    source: "luks-keys/drive2.key"
 """
         return template
     

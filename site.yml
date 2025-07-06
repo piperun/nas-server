@@ -24,8 +24,9 @@
     #- role: nfs-server
 
     #- role: samba-server
-    - role: vuetorrent
+    #- role: vuetorrent
     #- role: cockpit
+    - role: cockpit_theme
 
   post_tasks:
     - name: Display access information
@@ -36,8 +37,10 @@
           Cockpit Web Interface:
           http://{{ ansible_default_ipv4.address }}:9090
           
+          {% if nfs_export_path is defined %}
           NFS Server:
           Mount command example:
           sudo mount -t nfs4 {{ ansible_default_ipv4.address }}:/ /mnt/nfs
           
           NFS Export path on server: {{ nfs_export_path }}
+          {% endif %}
