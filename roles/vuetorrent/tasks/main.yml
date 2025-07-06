@@ -25,16 +25,47 @@
     owner: "1000"
     group: "1000"
 
-- name: "Allow VueTorrent traffic through the firewall"
+- name: "Check if VueTorrent web UI port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port={{ vuetorrent_webui_port }}/tcp
+  register: vuetorrent_webui_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Check if VueTorrent torrent TCP port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port={{ vuetorrent_torrent_port }}/tcp
+  register: vuetorrent_torrent_tcp_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Check if VueTorrent torrent UDP port is already enabled"
+  ansible.builtin.command: firewall-cmd --query-port={{ vuetorrent_torrent_port }}/udp
+  register: vuetorrent_torrent_udp_firewall
+  changed_when: false
+  failed_when: false
+
+- name: "Allow VueTorrent web UI traffic through the firewall"
   ansible.posix.firewalld:
-    port: "{{ item }}"
+    port: "{{ vuetorrent_webui_port }}/tcp"
     permanent: true
     state: enabled
     immediate: true
-  loop:
-    - "{{ vuetorrent_webui_port }}/tcp"
-    - "{{ vuetorrent_torrent_port }}/tcp"
-    - "{{ vuetorrent_torrent_port }}/udp"
+  when: not vuetorrent_webui_firewall.stdout | bool
+
+- name: "Allow VueTorrent torrent TCP traffic through the firewall"
+  ansible.posix.firewalld:
+    port: "{{ vuetorrent_torrent_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: not vuetorrent_torrent_tcp_firewall.stdout | bool
+
+- name: "Allow VueTorrent torrent UDP traffic through the firewall"
+  ansible.posix.firewalld:
+    port: "{{ vuetorrent_torrent_port }}/udp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: not vuetorrent_torrent_udp_firewall.stdout | bool
 
 - name: "Template the VueTorrent Quadlet unit file"
   ansible.builtin.template:
