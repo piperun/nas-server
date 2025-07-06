@@ -1,0 +1,7 @@
+{% set html = original_login_html.content | b64decode %}
+{{ html[:html.find('</head>')] }}
+  <link  type="text/css" rel="stylesheet" href="cockpit/static/theme/theme.css" />
+  <link  type="text/css" rel="stylesheet" href="cockpit/static/theme/backgrounds.css" />
+  <script type="text/javascript" src="cockpit/static/theme/theme-login.js"></script>
+</head>
+{{ html[html.find('<body'):] }} 

@@ -1,0 +1,21 @@
+/* Background classes for random background selection */
+{% for index in range(cockpit_backgrounds | length) %}
+body.login-pf.bg-{{ index }} {
+    background-image: url('images/{{ cockpit_backgrounds[index] }}');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    opacity: 0;
+    transition: opacity 0.4s cubic-bezier(.4,0,.2,1);
+}
+{% endfor %}
+
+/* Fallback background for when no random class is applied */
+body.login-pf:not([class*="bg-"]) {
+    background-image: url('images/{{ cockpit_backgrounds[0] if cockpit_backgrounds else "background-0.png" }}');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+} 

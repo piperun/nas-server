@@ -1,0 +1,159 @@
+---
+- name: Check if Cockpit is running
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: started
+  register: cockpit_status
+  check_mode: false
+
+- name: Stop Cockpit if running
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: stopped
+  when: cockpit_status.status.ActiveState == "active"
+  notify: reload systemd
+
+- name: Clean up old theme files and overrides
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/systemd/system/cockpit.service.d"
+    - "/var/usrlocal/share/cockpit/theme"
+  notify: reload systemd
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Start Cockpit with default configuration
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: started
+
+- name: Wait for Cockpit container to be ready
+  ansible.builtin.wait_for:
+    timeout: 5
+
+- name: Copy original login.html from container
+  containers.podman.podman_container_copy:
+    container: cockpit-ws
+    src: /usr/share/cockpit/static/login.html
+    dest: /tmp/original-login.html
+    from_container: true
+
+- name: Read original login.html content
+  ansible.builtin.slurp:
+    src: /tmp/original-login.html
+  register: original_login_html
+
+- name: Stop Cockpit before adding new theme
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: stopped
+  notify: reload systemd
+
+- name: Validate theme files exist locally
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/files/theme/{{ cockpit_theme }}/{{ item }}"
+  loop:
+    - "assets/theme.css"
+    - "branding/"
+    - "images/"
+  delegate_to: localhost
+  become: no
+  register: theme_files_check
+
+- name: Fail if required theme files are missing
+  ansible.builtin.fail:
+    msg: "Required theme file {{ item.item }} does not exist"
+  when: not item.stat.exists
+  loop: "{{ theme_files_check.results }}"
+
+- name: Find all image files in theme images directory
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/files/theme/{{ cockpit_theme }}/images"
+    patterns: "*.jpg,*.jpeg,*.png,*.gif,*.webp,*.apng"
+  delegate_to: localhost
+  become: no
+  register: all_images
+
+- name: Create theme directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/assets"
+    - "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/branding"
+    - "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/images"
+
+- name: Copy theme CSS files
+  ansible.builtin.copy:
+    src: "files/theme/{{ cockpit_theme }}/assets/"
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/assets/"
+    mode: '0644'
+    remote_src: false
+
+- name: Copy theme branding files
+  ansible.builtin.copy:
+    src: "files/theme/{{ cockpit_theme }}/branding/"
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/branding/"
+    mode: '0644'
+    remote_src: false
+
+- name: Copy and rename image files to background-<number>.extension format
+  ansible.builtin.copy:
+    src: "{{ item[1].path }}"
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/images/background-{{ item[0] }}.{{ item[1].path | basename | regex_replace('.*\\.', '') }}"
+    mode: '0644'
+    remote_src: false
+  with_indexed_items: "{{ all_images.files }}"
+  when: all_images.files | length > 0
+
+- name: Find renamed background images
+  ansible.builtin.find:
+    paths: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/images"
+    patterns: "background-*.jpg,background-*.jpeg,background-*.png,background-*.gif,background-*.webp,background-*.apng"
+  register: background_images
+
+- name: Set background images variable
+  ansible.builtin.set_fact:
+    cockpit_backgrounds: "{{ background_images.files | map(attribute='path') | map('basename') | list | sort }}"
+
+- name: Generate theme-login.js from template
+  ansible.builtin.template:
+    src: templates/theme-login.js.j2
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/assets/theme-login.js"
+    mode: '0644'
+
+- name: Generate backgrounds.css from template
+  ansible.builtin.template:
+    src: templates/backgrounds.css.j2
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/assets/backgrounds.css"
+    mode: '0644'
+
+- name: Generate customized login.html from template
+  ansible.builtin.template:
+    src: templates/login.html.j2
+    dest: "/var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/login.html"
+    mode: '0644'
+
+- name: Create systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/cockpit.service.d
+    state: directory
+    mode: '0755'
+
+- name: Create systemd override file
+  ansible.builtin.template:
+    src: templates/override.conf.j2
+    dest: /etc/systemd/system/cockpit.service.d/override.conf
+    mode: '0644'
+  notify: reload systemd
+
+- name: Start Cockpit with new theme
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: started
+  notify: reload systemd 

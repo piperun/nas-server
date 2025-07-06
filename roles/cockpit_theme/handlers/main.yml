@@ -1,0 +1,28 @@
+---
+# roles/cockpit_theme/handlers/main.yml
+
+- name: stop cockpit
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: stopped
+  listen: "cockpit lifecycle"
+
+- name: clean old theme files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/systemd/system/cockpit.service.d"
+    - "/var/usrlocal/share/cockpit/theme"
+  listen: "cockpit lifecycle"
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  listen: "cockpit lifecycle"
+
+- name: start cockpit
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: started
+  listen: "cockpit lifecycle" 

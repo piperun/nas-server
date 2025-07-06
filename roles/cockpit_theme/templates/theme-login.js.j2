@@ -1,0 +1,39 @@
+// theme-login.js
+// Random background selection for Cockpit login page
+(function() {
+    'use strict';
+    const backgroundCount = {{ cockpit_backgrounds | length }};
+    if (backgroundCount > 0) {
+        function pickRandomIndex() {
+            let lastIndex = parseInt(localStorage.getItem('cockpitLoginBgIndex'), 10);
+            let randomIndex;
+            if (backgroundCount > 1) {
+                do {
+                    randomIndex = Math.floor(Math.random() * backgroundCount);
+                } while (randomIndex === lastIndex);
+            } else {
+                randomIndex = 0;
+            }
+            localStorage.setItem('cockpitLoginBgIndex', randomIndex);
+            return randomIndex;
+        }
+
+        function applyBackground() {
+            if (document.body) {
+                const randomIndex = pickRandomIndex();
+                document.body.classList.add('bg-' + randomIndex);
+                document.body.style.opacity = '0';
+                setTimeout(function() {
+                    document.body.style.transition = 'opacity 0.4s cubic-bezier(.4,0,.2,1)';
+                    document.body.style.opacity = '1';
+                }, 100);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyBackground);
+        } else {
+            applyBackground();
+        }
+    }
+})(); 

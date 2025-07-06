@@ -33,3 +33,14 @@ vuetorrent_password: "{{ vault_vuetorrent_password }}"
 
 # Additional vault-secured variables
 cockpit_admin_password: "{{ vault_cockpit_admin_password | default('') }}"
+
+
+cockpit_logo: "{{ branding_config.cockpit_logo | default('') }}"
+cockpit_favicon: "{{ branding_config.cockpit_favicon | default('') }}"
+cockpit_apple_touch_icon: "{{ branding_config.cockpit_apple_touch_icon | default('') }}"
+cockpit_backgrounds: "{{ branding_config.cockpit_backgrounds | default([]) | list }}"
+cockpit_css_files: "{{ branding_config.cockpit_css_files | default([]) | list }}"
+
+
+cockpit_theme: glassy
+cockpit_theme_dir: "files/theme/{{ cockpit_theme }}"

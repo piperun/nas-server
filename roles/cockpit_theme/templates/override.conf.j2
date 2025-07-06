@@ -1,0 +1,11 @@
+[Service]
+ExecStart=
+ExecStart=/usr/bin/podman run -d --name cockpit-ws --privileged --pid=host \
+  -v /:/host \
+  -v /var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/assets:/usr/share/cockpit/static/theme:ro \
+  -v /var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/branding:/usr/share/cockpit/branding:ro \
+  -v /var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/images:/usr/share/cockpit/static/theme/images:ro \
+  -v /var/usrlocal/share/cockpit/theme/{{ cockpit_theme }}/login.html:/usr/share/cockpit/static/login.html:ro \
+  -e NAME=cockpit-ws \
+  -e IMAGE=quay.io/cockpit/ws \
+  quay.io/cockpit/ws /container/label-run 
