@@ -10,3 +10,8 @@
   ansible.builtin.reboot:
     reboot_timeout: 300
     test_command: uptime
+
+- name: Restart Cockpit service
+  ansible.builtin.systemd:
+    name: cockpit.service
+    state: restarted

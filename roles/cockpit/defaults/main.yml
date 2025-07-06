@@ -7,3 +7,4 @@ cockpit_service_name: "cockpit.service"
 
 # Firewall configuration
 cockpit_firewall_service: "cockpit"
+

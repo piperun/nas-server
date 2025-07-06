@@ -1,0 +1,21 @@
+[Unit]
+Description=Cockpit Web Service with Custom Branding
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=quay.io/cockpit/ws:latest
+ContainerName=cockpit-ws
+Volume=/:/host:O
+Volume=/var/usrlocal/share/cockpit/branding:/usr/share/cockpit/branding:ro
+Environment=NAME=cockpit-ws
+Environment=IMAGE=quay.io/cockpit/ws:latest
+PodmanArgs=--privileged --pid=host
+
+[Service]
+Type=notify
+TimeoutStartSec=900
+TimeoutStopSec=70
+
+[Install]
+WantedBy=multi-user.target 

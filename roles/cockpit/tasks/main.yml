@@ -27,6 +27,13 @@
     - "'PasswordAuthentication yes' not in main_sshd_config_check.stdout"
   notify: Restart sshd
 
+- name: "Check if Cockpit packages are already installed"
+  ansible.builtin.command:
+    cmd: rpm -q cockpit-system cockpit-ostree cockpit-podman cockpit-networkmanager
+  register: cockpit_packages_check
+  failed_when: false
+  changed_when: false
+
 - name: "Install Cockpit packages as overlay RPMs"
   community.general.rpm_ostree_pkg:
     name:
@@ -35,30 +42,47 @@
       - cockpit-podman
       - cockpit-networkmanager
     state: present
+  when: cockpit_packages_check.rc != 0
   notify: Reboot to apply OS changes
 
 - name: "Flush handlers to reboot if needed"
   meta: flush_handlers
+  when: cockpit_packages_check.rc != 0
 
-- name: "Run Cockpit web service container"
-  ansible.builtin.command:
-    cmd: podman container runlabel --name cockpit-ws RUN quay.io/cockpit/ws
-  register: cockpit_run_result
+- name: "Check if Cockpit systemd service is already installed"
+  ansible.builtin.systemd:
+    name: "{{ cockpit_service_name }}"
+  register: cockpit_service_check
   failed_when: false
-  changed_when: cockpit_run_result.rc == 0
 
-- name: "Install Cockpit systemd service"
+- name: "Install Cockpit systemd service (official method)"
   ansible.builtin.command:
     cmd: podman container runlabel INSTALL quay.io/cockpit/ws
   register: cockpit_install_result
   failed_when: false
   changed_when: cockpit_install_result.rc == 0
+  when: not cockpit_service_check.status.LoadState | default('not-found') == "loaded"
+
+- name: "Check if Cockpit service is already enabled and running"
+  ansible.builtin.systemd:
+    name: "{{ cockpit_service_name }}"
+  register: cockpit_service_status
+  failed_when: false
 
 - name: "Enable and start Cockpit service"
   ansible.builtin.systemd:
     name: "{{ cockpit_service_name }}"
     state: started
     enabled: true
+  when: 
+    - not cockpit_service_status.status.ActiveState | default('inactive') == "active"
+    - not cockpit_service_status.status.UnitFileState | default('disabled') == "enabled"
+
+- name: "Check if Cockpit firewall service is already enabled"
+  ansible.builtin.command: firewall-cmd --query-service=cockpit
+  register: cockpit_firewall_service
+  changed_when: false
+  failed_when: false
 
 - name: "Configure firewall for Cockpit"
   ansible.posix.firewalld:
@@ -66,59 +90,5 @@
     permanent: true
     state: enabled
     immediate: true
+  when: not cockpit_firewall_service.stdout | bool
 
-- name: "Display Cockpit access information"
-  ansible.builtin.debug:
-    msg: |
-      Cockpit Web Interface is available at:
-      https://{{ ansible_default_ipv4.address }}:{{ cockpit_port }}
-      
-      Use your system user credentials to log in.
-      
-      Note: First-time access may show a security warning
-      due to self-signed certificates. This is normal.
-
-- name: Set Cockpit branding directory fact
-  set_fact:
-    cockpit_branding_dir: "/usr/share/cockpit/branding/{{ ansible_distribution | lower }}-{{ ansible_distribution_release | lower }}"
-
-- name: Ensure Cockpit branding directory exists
-  ansible.builtin.file:
-    path: "{{ cockpit_branding_dir }}"
-    state: directory
-    mode: '0755'
-
-- name: Copy custom logo if defined
-  ansible.builtin.copy:
-    src: "{{ cockpit_logo | default(omit) }}"
-    dest: "{{ cockpit_branding_dir }}/logo.png"
-    mode: '0644'
-  when: cockpit_logo is defined
-
-- name: Copy custom favicon if defined
-  ansible.builtin.copy:
-    src: "{{ cockpit_favicon | default(omit) }}"
-    dest: "{{ cockpit_branding_dir }}/favicon.ico"
-    mode: '0644'
-  when: cockpit_favicon is defined
-
-- name: Copy custom apple-touch-icon if defined
-  ansible.builtin.copy:
-    src: "{{ cockpit_apple_touch_icon | default(omit) }}"
-    dest: "{{ cockpit_branding_dir }}/apple-touch-icon.png"
-    mode: '0644'
-  when: cockpit_apple_touch_icon is defined
-
-- name: Copy custom background if defined
-  ansible.builtin.copy:
-    src: "{{ cockpit_background | default(omit) }}"
-    dest: "{{ cockpit_branding_dir }}/background.jpg"
-    mode: '0644'
-  when: cockpit_background is defined
-
-- name: Copy custom CSS if defined
-  ansible.builtin.copy:
-    src: "{{ cockpit_css | default(omit) }}"
-    dest: "{{ cockpit_branding_dir }}/branding.css"
-    mode: '0644'
-  when: cockpit_css is defined
