@@ -8,3 +8,17 @@ host_vars/nas-server.yml
 host_vars/nas-server.yml
 files/*
 logo.yml
+
+# Ignore all image files everywhere
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+
+# Allow CSS and JS in theme assets and branding
+!files/theme/*/assets/*.css
+!files/theme/*/assets/*.js
+!files/theme/*/branding/*.css
+!files/theme/*/branding/*.js
