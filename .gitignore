@@ -6,7 +6,6 @@ inventory/*
 inventories/*
 host_vars/nas-server.yml
 host_vars/nas-server.yml
-files/*
 logo.yml
 
 # Ignore all image files everywhere

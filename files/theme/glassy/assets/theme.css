@@ -1,0 +1,42 @@
+/* Cockpit Branding CSS - Main Entry Point */
+@import url('glassmorph-theme.css');
+@import url('login-theme.css');
+@import url('backgrounds.css');
+
+/* ==========================================================================
+   Custom Branding Configuration
+   ========================================================================== */
+
+/* Stylish server name brand */
+body.login-pf #brand {
+  font-size: 2.2rem !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  text-align: center !important;
+  margin-bottom: 1.5rem !important;
+  letter-spacing: 1.5px !important;
+  text-shadow: 0 4px 24px rgba(0,0,0,0.25), 0 1px 0 #fff;
+  background: linear-gradient(90deg, #00d4aa 0%, #007cba 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ==========================================================================
+   Theme Customization Variables
+   ========================================================================== */
+
+:root {
+  --primary-color: #007cba;
+  --secondary-color: #005a87;
+  --accent-color: #00d4aa;
+  --glass-blur: 15px;
+  --glass-opacity: 0.15;
+}
+
+/* ==========================================================================
+   Additional Custom Styles
+   ========================================================================== */
+
+/* Add any additional custom styles here */
+/* This file serves as the main entry point for branding customization */ 
